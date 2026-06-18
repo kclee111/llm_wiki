@@ -1,0 +1,15 @@
+# Normalize all text files to LF in the repo and the working tree.
+# The repo is already 100% LF; this makes it deterministic regardless of
+# each contributor's core.autocrlf setting and stops phantom "modified"
+# entries on Windows (autocrlf=true previously flagged LF files as changed).
+* text=auto eol=lf
+
+# Explicit binaries — never apply EOL conversion to these.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.icns binary
+*.dll  binary
+*.so   binary
+*.dylib binary
