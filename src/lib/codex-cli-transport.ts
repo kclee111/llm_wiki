@@ -13,6 +13,13 @@ import { useWikiStore } from "@/stores/wiki-store"
 import type { ChatMessage, ContentBlock, RequestOverrides } from "./llm-providers"
 import type { StreamCallbacks } from "./llm-client"
 
+const CODEX_CLI_TEXT_COMPLETION_PREAMBLE = [
+  "You are running inside LLM Wiki as a stateless text-completion provider.",
+  "Do not use tools. Do not inspect, create, edit, delete, move, or patch files.",
+  "Do not call shell commands. Do not use apply_patch.",
+  "Return only the requested textual answer for LLM Wiki to consume; the application will handle all file writes itself.",
+].join("\n")
+
 export function parseCodexCliLine(rawLine: string): string | null {
   const line = rawLine.trim()
   if (!line) return null
@@ -50,12 +57,13 @@ function escapePromptContent(text: string): string {
 }
 
 export function buildPrompt(messages: ChatMessage[]): string {
-  return messages
+  const conversation = messages
     .map((message) => {
       const role = message.role.toUpperCase()
       return `<${role}>\n${escapePromptContent(contentToText(message.content))}\n</${role}>`
     })
     .join("\n\n")
+  return `${CODEX_CLI_TEXT_COMPLETION_PREAMBLE}\n\n${conversation}`
 }
 
 type SpawnPayload = Record<string, unknown> & {
