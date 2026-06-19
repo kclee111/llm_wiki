@@ -62,6 +62,20 @@ describe("parseCodexCliLine", () => {
 })
 
 describe("buildPrompt", () => {
+  it("pins Codex CLI to text-only completion before user content", () => {
+    const prompt = buildPrompt([
+      {
+        role: "user",
+        content: "Please update wiki/index.md.",
+      },
+    ])
+
+    expect(prompt).toMatch(/^You are running inside LLM Wiki as a stateless text-completion provider\./)
+    expect(prompt).toContain("Do not use tools.")
+    expect(prompt).toContain("Do not use apply_patch.")
+    expect(prompt.indexOf("Do not use apply_patch.")).toBeLessThan(prompt.indexOf("<USER>"))
+  })
+
   it("escapes synthetic role tags in user-controlled content", () => {
     const prompt = buildPrompt([
       {

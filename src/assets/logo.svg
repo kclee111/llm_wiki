@@ -1,0 +1,43 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LLM Wiki">
+  <defs>
+    <linearGradient id="bg3" x1="40" y1="40" x2="472" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0FB890"/>
+      <stop offset="1" stop-color="#0A7C8C"/>
+    </linearGradient>
+    <linearGradient id="spark3" x1="300" y1="80" x2="430" y2="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C9FFE9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect x="16" y="16" width="480" height="480" rx="120" fill="url(#bg3)"/>
+
+  <!-- Wiki document -->
+  <rect x="120" y="150" width="232" height="288" rx="28"
+        fill="#FFFFFF"/>
+  <!-- text lines -->
+  <g stroke="#0A7C8C" stroke-width="18" stroke-linecap="round">
+    <line x1="160" y1="214" x2="312" y2="214"/>
+    <line x1="160" y1="266" x2="312" y2="266"/>
+    <line x1="160" y1="318" x2="312" y2="318"/>
+    <line x1="160" y1="370" x2="256" y2="370"/>
+  </g>
+
+  <!-- AI sparkle (4-point star) -->
+  <g>
+    <path d="M362 96
+             C 372 158, 386 172, 448 182
+             C 386 192, 372 206, 362 268
+             C 352 206, 338 192, 276 182
+             C 338 172, 352 158, 362 96 Z"
+          fill="url(#spark3)" stroke="#0A7C8C" stroke-width="10" stroke-linejoin="round"/>
+    <!-- small accent spark -->
+    <path d="M300 300
+             C 305 326, 312 333, 338 338
+             C 312 343, 305 350, 300 376
+             C 295 350, 288 343, 262 338
+             C 288 333, 295 326, 300 300 Z"
+          fill="#FFFFFF"/>
+  </g>
+</svg>

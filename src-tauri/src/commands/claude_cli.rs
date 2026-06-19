@@ -122,8 +122,6 @@ async fn find_claude_command() -> Result<PathBuf, String> {
 fn suppress_windows_console(_cmd: &mut Command) {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-
         const CREATE_NO_WINDOW: u32 = 0x08000000;
         _cmd.creation_flags(CREATE_NO_WINDOW);
     }
@@ -424,17 +422,23 @@ async fn resolve_claude_working_directory(value: Option<String>) -> Result<PathB
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "Claude Code CLI requires an active project working directory".to_string())?;
+        .ok_or_else(|| {
+            "Claude Code CLI requires an active project working directory".to_string()
+        })?;
     let path = Path::new(raw.as_str());
     if !path.is_absolute() {
-        return Err("Claude Code CLI working directory must be an absolute project path".to_string());
+        return Err(
+            "Claude Code CLI working directory must be an absolute project path".to_string(),
+        );
     }
     let path_meta = tokio::fs::metadata(path).await.map_err(|e| {
         eprintln!("[claude-cli] failed to read working directory metadata {raw}: {e}");
         format!("Claude Code CLI working directory does not exist or cannot be read: {raw}")
     })?;
     if !path_meta.is_dir() {
-        return Err(format!("Claude Code CLI working directory is not a directory: {raw}"));
+        return Err(format!(
+            "Claude Code CLI working directory is not a directory: {raw}"
+        ));
     }
     let index_path = path.join("wiki").join("index.md");
     let index_meta = tokio::fs::metadata(&index_path).await.map_err(|e| {
@@ -555,10 +559,12 @@ mod tests {
             .await
             .unwrap_err()
             .contains("active project"));
-        assert!(resolve_claude_working_directory(Some("relative/path".to_string()))
-            .await
-            .unwrap_err()
-            .contains("absolute"));
+        assert!(
+            resolve_claude_working_directory(Some("relative/path".to_string()))
+                .await
+                .unwrap_err()
+                .contains("absolute")
+        );
 
         let dir = std::env::temp_dir().join(format!(
             "llm-wiki-claude-cwd-{}-{}",

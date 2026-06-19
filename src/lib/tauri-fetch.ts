@@ -64,6 +64,13 @@ export function getHttpFetch(): Promise<typeof globalThis.fetch> {
  * into a single opaque error with no structured detail. The only
  * reliable cross-platform signal is "not an AbortError AND one of
  * these generic network error shapes", which this helper centralizes.
+ *
+ * Requests routed through the Tauri HTTP plugin (getHttpFetch) hit the
+ * Rust reqwest backend instead of browser fetch, which phrases a
+ * connection failure as "error sending request for url (...)". Without
+ * matching that shape, callers (AnyTXT / SearXNG / Tavily) fall through
+ * to the raw reqwest string instead of their friendly "is the service
+ * running?" message.
  */
 export function isFetchNetworkError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
@@ -75,5 +82,7 @@ export function isFetchNetworkError(err: unknown): boolean {
   // Chromium mid-stream drop
   if (err.message === "Failed to fetch") return true
   if (err.message.includes("network error")) return true
+  // Tauri HTTP plugin (Rust reqwest): connection refused / DNS / connect timeout
+  if (err.message.includes("error sending request")) return true
   return false
 }
