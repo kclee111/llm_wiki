@@ -76,4 +76,15 @@ describe("isFetchNetworkError", () => {
     const err = new Error("there was a network error while connecting")
     expect(isFetchNetworkError(err)).toBe(true)
   })
+
+  it("recognizes the Tauri HTTP plugin (reqwest) connection failure", () => {
+    // When a request routed through @tauri-apps/plugin-http can't reach the
+    // host (connection refused / DNS / connect timeout), reqwest surfaces
+    // "error sending request for url (http://127.0.0.1:9920/)" — distinct
+    // from the browser-fetch shapes above. AnyTXT / SearXNG / Tavily all
+    // route through this plugin, so their friendly "is the service running?"
+    // messages depend on this being classified as a network error.
+    const err = new Error("error sending request for url (http://127.0.0.1:9920/)")
+    expect(isFetchNetworkError(err)).toBe(true)
+  })
 })
