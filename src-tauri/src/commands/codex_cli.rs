@@ -140,6 +140,7 @@ pub async fn codex_cli_spawn(
     isolate_local_config: bool,
     timeout_minutes: Option<u64>,
     working_directory: Option<String>,
+    reasoning_effort: Option<String>,
 ) -> Result<(), String> {
     if prompt.trim().is_empty() {
         return Err("No prompt to send to codex CLI".to_string());
@@ -154,7 +155,11 @@ pub async fn codex_cli_spawn(
     if let Some(path_env) = child_path_env().await {
         cmd.env("PATH", path_env);
     }
-    cmd.args(build_codex_cli_args(&model, isolate_local_config));
+    cmd.args(build_codex_cli_args(
+        &model,
+        isolate_local_config,
+        reasoning_effort.as_deref(),
+    ));
     cmd.current_dir(&working_directory);
 
     cmd.stdin(Stdio::piped())
@@ -293,7 +298,11 @@ fn codex_spawn_timeout_minutes(value: Option<u64>) -> u64 {
     )
 }
 
-fn build_codex_cli_args(model: &str, isolate_local_config: bool) -> Vec<String> {
+fn build_codex_cli_args(
+    model: &str,
+    isolate_local_config: bool,
+    reasoning_effort: Option<&str>,
+) -> Vec<String> {
     let mut args = vec!["-a".to_string(), "never".to_string(), "exec".to_string()];
 
     if isolate_local_config {
@@ -301,6 +310,11 @@ fn build_codex_cli_args(model: &str, isolate_local_config: bool) -> Vec<String> 
             "--ignore-user-config".to_string(),
             "--ignore-rules".to_string(),
         ]);
+    }
+
+    // Bound hidden reasoning so the model leaves room to emit a final message.
+    if let Some(effort) = reasoning_effort {
+        args.extend(["-c".to_string(), format!("model_reasoning_effort={effort}")]);
     }
 
     args.extend([
@@ -411,7 +425,7 @@ mod tests {
 
     #[test]
     fn codex_args_do_not_isolate_local_config_by_default() {
-        let args = build_codex_cli_args("gpt-5", false);
+        let args = build_codex_cli_args("gpt-5", false, None);
 
         assert!(args
             .windows(3)
@@ -424,7 +438,7 @@ mod tests {
 
     #[test]
     fn codex_args_can_isolate_user_config_and_rules() {
-        let args = build_codex_cli_args("gpt-5", true);
+        let args = build_codex_cli_args("gpt-5", true, None);
         let exec_pos = args.iter().position(|arg| arg == "exec").expect("exec arg");
         let ignore_config_pos = args
             .iter()
@@ -437,6 +451,23 @@ mod tests {
 
         assert!(ignore_config_pos > exec_pos);
         assert!(ignore_rules_pos > exec_pos);
+    }
+
+    #[test]
+    fn codex_args_pass_reasoning_effort_as_config_override() {
+        let args = build_codex_cli_args("gpt-5", false, Some("low"));
+        let config_pos = args
+            .iter()
+            .position(|arg| arg == "-c")
+            .expect("config flag");
+        assert_eq!(args[config_pos + 1], "model_reasoning_effort=low");
+    }
+
+    #[test]
+    fn codex_args_omit_reasoning_effort_when_absent() {
+        let args = build_codex_cli_args("gpt-5", false, None);
+        assert!(!args.iter().any(|arg| arg.starts_with("model_reasoning_effort=")));
+        assert!(!args.iter().any(|arg| arg == "-c"));
     }
 
     struct TestDir(PathBuf);
