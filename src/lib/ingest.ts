@@ -1116,6 +1116,11 @@ async function autoIngestImpl(
   // safe.
   if (writtenPaths.length > 0 && hardFailures.length === 0) {
     await saveIngestCache(pp, sourceIdentity, sourceContent, writtenPaths)
+    // The Sources-tree "ingested ✓" badge reads from the ingest cache we
+    // just wrote. The earlier bump (Step 3.5) fired before the cache
+    // existed, so bump once more here to surface the badge without a
+    // manual refresh.
+    useWikiStore.getState().bumpDataVersion()
     if (longSourceCheckpointPath) {
       await clearLongSourceCheckpoint(longSourceCheckpointPath)
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { open } from "@tauri-apps/plugin-dialog"
-import { Plus, FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown } from "lucide-react"
+import { Plus, FileText, RefreshCw, BookOpen, Trash2, Folder, ChevronRight, ChevronDown, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -9,6 +9,8 @@ import { listDirectory, readFile } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { normalizePath } from "@/lib/path-utils"
+import { sourceIdentityForPath } from "@/lib/source-identity"
+import { getIngestedSourceIdentities } from "@/lib/ingest-cache"
 import { decideDeleteClick } from "@/lib/sources-tree-delete"
 import { rescanProjectFileSync } from "@/lib/project-file-sync"
 import {
@@ -33,6 +35,9 @@ export function SourcesView() {
   const sourceWatchConfig = useWikiStore((s) => s.sourceWatchConfig)
   const dataVersion = useWikiStore((s) => s.dataVersion)
   const [sources, setSources] = useState<FileNode[]>([])
+  /** Lower-cased source identities that have an ingest-cache entry, used to
+   *  render an "ingested ✓" badge per file. Refreshed alongside the tree. */
+  const [ingestedIds, setIngestedIds] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   const [ingestingPath, setIngestingPath] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -72,6 +77,14 @@ export function SourcesView() {
     } catch (err) {
       setRefreshError(String(err))
       setSources([])
+    }
+    // Ingest status is best-effort decoration — a failure here must not
+    // break the source listing, so it's loaded separately and defaults
+    // to "none ingested" on error.
+    try {
+      setIngestedIds(await getIngestedSourceIdentities(pp))
+    } catch {
+      setIngestedIds(new Set())
     }
   }, [project])
 
@@ -319,6 +332,8 @@ export function SourcesView() {
           <div className="p-2">
             <SourceTree
               nodes={sources}
+              projectPath={project ? normalizePath(project.path) : ""}
+              ingestedIds={ingestedIds}
               onOpen={handleOpenSource}
               onIngest={handleIngest}
               onDelete={handleDelete}
@@ -412,6 +427,8 @@ function flattenVisibleRows(
 
 function SourceTree({
   nodes,
+  projectPath,
+  ingestedIds,
   onOpen,
   onIngest,
   onDelete,
@@ -421,6 +438,10 @@ function SourceTree({
   ingestingPath,
 }: {
   nodes: FileNode[]
+  /** Project root (normalized) used to derive each file's source identity. */
+  projectPath: string
+  /** Lower-cased source identities with an ingest-cache entry. */
+  ingestedIds: Set<string>
   onOpen: (node: FileNode) => void
   onIngest: (node: FileNode) => void
   onDelete: (node: FileNode) => void
@@ -540,6 +561,15 @@ function SourceTree({
               <FileText className="h-4 w-4 shrink-0" />
               <span className="truncate">{node.name}</span>
             </button>
+            {projectPath &&
+              ingestedIds.has(sourceIdentityForPath(projectPath, node.path).toLowerCase()) && (
+                <CheckCircle2
+                  className="h-3.5 w-3.5 shrink-0 text-emerald-500"
+                  aria-label={t("sources.ingested")}
+                >
+                  <title>{t("sources.ingested")}</title>
+                </CheckCircle2>
+              )}
             <Button
               variant="ghost"
               size="icon"

@@ -93,6 +93,22 @@ export async function checkIngestCache(
 }
 
 /**
+ * Return the set of source identities that have a cache entry, i.e. have
+ * been ingested at least once. Keys are lower-cased so callers can match
+ * case-insensitively (Windows paths). This is a cheap existence check —
+ * it does NOT re-hash source content or verify written files still exist
+ * (use checkIngestCache for that). Intended for UI affordances like the
+ * Sources tree "ingested ✓" badge, where a stale entry is harmless and
+ * external-change detection is already handled by file-sync.
+ */
+export async function getIngestedSourceIdentities(
+  projectPath: string,
+): Promise<Set<string>> {
+  const cache = await loadCache(projectPath)
+  return new Set(Object.keys(cache.entries).map((key) => key.toLowerCase()))
+}
+
+/**
  * Save ingest result to cache after successful ingest.
  */
 export async function saveIngestCache(

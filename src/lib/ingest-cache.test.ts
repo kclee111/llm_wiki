@@ -7,7 +7,7 @@ vi.mock("@/commands/fs", () => ({
   fileExists: vi.fn(),
 }))
 
-import { checkIngestCache, saveIngestCache } from "./ingest-cache"
+import { checkIngestCache, saveIngestCache, getIngestedSourceIdentities } from "./ingest-cache"
 import { readFile, writeFile, fileExists } from "@/commands/fs"
 
 const mockReadFile = vi.mocked(readFile)
@@ -92,5 +92,26 @@ describe("ingest-cache — checkIngestCache", () => {
 
     const result = await checkIngestCache("/project", "foo.pdf", "hello")
     expect(result).toBeNull()
+  })
+})
+
+describe("ingest-cache — getIngestedSourceIdentities", () => {
+  it("returns an empty set when no cache file exists", async () => {
+    mockReadFile.mockRejectedValue(new Error("ENOENT"))
+    const result = await getIngestedSourceIdentities("/project")
+    expect(result).toEqual(new Set())
+  })
+
+  it("returns lower-cased identity keys for every cache entry", async () => {
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        entries: {
+          "Papers/Foo.PDF": { hash: "a", timestamp: 1, filesWritten: [] },
+          "bar.md": { hash: "b", timestamp: 2, filesWritten: [] },
+        },
+      }),
+    )
+    const result = await getIngestedSourceIdentities("/project")
+    expect(result).toEqual(new Set(["papers/foo.pdf", "bar.md"]))
   })
 })
