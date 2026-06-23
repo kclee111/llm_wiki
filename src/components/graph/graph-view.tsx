@@ -2,7 +2,8 @@ import { useEffect, useCallback, useMemo, useState, useRef, type ChangeEvent } f
 import Graph from "graphology"
 import { SigmaContainer, useLoadGraph, useRegisterEvents, useSetSettings, useSigma } from "@react-sigma/core"
 import "@react-sigma/core/lib/style.css"
-import type { SigmaNodeEventPayload } from "sigma/types"
+import type { SigmaNodeEventPayload, NodeDisplayData, PartialButFor } from "sigma/types"
+import type { Settings } from "sigma/settings"
 import forceAtlas2 from "graphology-layout-forceatlas2"
 import { Network, RefreshCw, ZoomIn, ZoomOut, Maximize, Layers, Tag, Lightbulb, AlertTriangle, Link2, X, Search, Loader2, Filter, RotateCcw, EyeOff } from "lucide-react"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -20,7 +21,11 @@ import { applyGraphSearch } from "@/lib/graph-search"
 import { wikiTypeLabel } from "@/lib/wiki-page-types"
 import { useTranslation } from "react-i18next"
 
-const NODE_TYPE_COLORS: Record<string, string> = {
+// Node/community palettes are theme-split: dark mode uses bright -400 tones that
+// pop on a near-black canvas, light mode uses saturated -600 tones so the same
+// nodes keep enough contrast against a white canvas (the old shared -400 palette
+// made yellow/green/teal nodes nearly invisible in light mode).
+const NODE_TYPE_COLORS_DARK: Record<string, string> = {
   entity: "#60a5fa",    // blue-400
   concept: "#c084fc",   // purple-400
   source: "#fb923c",    // orange-400
@@ -34,7 +39,21 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   other: "#94a3b8",     // slate-400
 }
 
-const CUSTOM_NODE_COLORS = [
+const NODE_TYPE_COLORS_LIGHT: Record<string, string> = {
+  entity: "#2563eb",    // blue-600
+  concept: "#9333ea",   // purple-600
+  source: "#ea580c",    // orange-600
+  query: "#16a34a",     // green-600
+  synthesis: "#dc2626", // red-600
+  overview: "#ca8a04",  // yellow-600
+  comparison: "#0d9488", // teal-600
+  finding: "#7c3aed",    // violet-600
+  thesis: "#e11d48",     // rose-600
+  methodology: "#0f766e", // teal-700
+  other: "#475569",     // slate-600
+}
+
+const CUSTOM_NODE_COLORS_DARK = [
   "#38bdf8",
   "#34d399",
   "#fbbf24",
@@ -45,7 +64,18 @@ const CUSTOM_NODE_COLORS = [
   "#84cc16",
 ]
 
-const COMMUNITY_COLORS = [
+const CUSTOM_NODE_COLORS_LIGHT = [
+  "#0284c7", // sky-600
+  "#059669", // emerald-600
+  "#d97706", // amber-600
+  "#e11d48", // rose-600
+  "#7c3aed", // violet-600
+  "#0891b2", // cyan-600
+  "#ea580c", // orange-600
+  "#65a30d", // lime-600
+]
+
+const COMMUNITY_COLORS_DARK = [
   "#60a5fa",  // blue-400
   "#4ade80",  // green-400
   "#fb923c",  // orange-400
@@ -60,10 +90,29 @@ const COMMUNITY_COLORS = [
   "#fbbf24",  // amber-400
 ]
 
+const COMMUNITY_COLORS_LIGHT = [
+  "#2563eb",  // blue-600
+  "#16a34a",  // green-600
+  "#ea580c",  // orange-600
+  "#9333ea",  // purple-600
+  "#dc2626",  // red-600
+  "#0d9488",  // teal-600
+  "#ca8a04",  // yellow-600
+  "#db2777",  // pink-600
+  "#7c3aed",  // violet-600
+  "#0284c7",  // sky-600
+  "#059669",  // emerald-600
+  "#d97706",  // amber-600
+]
+
 type ColorMode = "type" | "community"
 type GraphThemePalette = {
   defaultEdge: string
   label: string
+  labelHalo: string
+  hoverBg: string
+  hoverBorder: string
+  edgeBaseRgb: string
   mutedNodeMixTarget: string
   dimmedEdge: string
   activeEdge: string
@@ -81,18 +130,26 @@ type HoverState = { node: string; neighbors: Set<string> } | null
 function graphThemePalette(isDark: boolean): GraphThemePalette {
   return isDark
     ? {
-        defaultEdge: "rgba(100,116,139,0.18)",
-        label: "#e2e8f0",
+        defaultEdge: "rgba(148,163,184,0.28)",
+        label: "#f1f5f9",
+        labelHalo: "rgba(2,6,23,0.92)",
+        hoverBg: "rgba(15,23,42,0.96)",
+        hoverBorder: "rgba(148,163,184,0.45)",
+        edgeBaseRgb: "148,163,184",
         mutedNodeMixTarget: "#334155",
         dimmedEdge: "rgba(71,85,105,0.12)",
         activeEdge: "#38bdf8",
       }
     : {
-        defaultEdge: "#cbd5e1",
-        label: "#1e293b",
+        defaultEdge: "#94a3b8",
+        label: "#0f172a",
+        labelHalo: "rgba(255,255,255,0.95)",
+        hoverBg: "rgba(255,255,255,0.97)",
+        hoverBorder: "rgba(100,116,139,0.35)",
+        edgeBaseRgb: "71,85,105",
         mutedNodeMixTarget: "#e2e8f0",
-        dimmedEdge: "rgba(148,163,184,0.22)",
-        activeEdge: "#1e293b",
+        dimmedEdge: "rgba(148,163,184,0.28)",
+        activeEdge: "#0f172a",
       }
 }
 
@@ -111,11 +168,83 @@ function useResolvedDarkMode(): boolean {
   return isDark
 }
 
-function nodeColor(type: string): string {
-  if (NODE_TYPE_COLORS[type]) return NODE_TYPE_COLORS[type]
+function nodeColor(type: string, isDark: boolean): string {
+  const typeColors = isDark ? NODE_TYPE_COLORS_DARK : NODE_TYPE_COLORS_LIGHT
+  const known = typeColors[type]
+  if (known) return known
   let hash = 0
   for (const char of type) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  return CUSTOM_NODE_COLORS[hash % CUSTOM_NODE_COLORS.length] ?? NODE_TYPE_COLORS.other
+  const custom = isDark ? CUSTOM_NODE_COLORS_DARK : CUSTOM_NODE_COLORS_LIGHT
+  return custom[hash % custom.length] ?? typeColors.other ?? "#94a3b8"
+}
+
+function communityColor(community: number, isDark: boolean): string {
+  const arr = isDark ? COMMUNITY_COLORS_DARK : COMMUNITY_COLORS_LIGHT
+  return arr[community % arr.length] ?? "#94a3b8"
+}
+
+// Canvas label renderers with a contrasting halo so node labels stay legible on
+// top of nodes, edges and dense clusters. Sigma's built-in label drawer paints
+// glyphs only (no outline), which disappears whenever text overlaps geometry.
+type LabelDrawer = (
+  context: CanvasRenderingContext2D,
+  data: PartialButFor<NodeDisplayData, "x" | "y" | "size" | "label" | "color">,
+  settings: Settings,
+) => void
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.min(r, h / 2, w / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.arcTo(x + w, y, x + w, y + h, radius)
+  ctx.arcTo(x + w, y + h, x, y + h, radius)
+  ctx.arcTo(x, y + h, x, y, radius)
+  ctx.arcTo(x, y, x + w, y, radius)
+  ctx.closePath()
+}
+
+function makeLabelRenderers(palette: GraphThemePalette): { drawLabel: LabelDrawer; drawHover: LabelDrawer } {
+  const drawLabel: LabelDrawer = (context, data, settings) => {
+    if (!data.label) return
+    const size = settings.labelSize
+    context.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`
+    const x = data.x + data.size + 4
+    const y = data.y + size / 3
+    context.lineJoin = "round"
+    context.lineWidth = 3.5
+    context.strokeStyle = palette.labelHalo
+    context.strokeText(data.label, x, y)
+    context.fillStyle = palette.label
+    context.fillText(data.label, x, y)
+  }
+
+  const drawHover: LabelDrawer = (context, data, settings) => {
+    if (!data.label) return
+    const size = settings.labelSize
+    context.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`
+    const textWidth = context.measureText(data.label).width
+    const x = data.x + data.size + 4
+    const y = data.y + size / 3
+    const padX = 7
+    const padY = 5
+    context.fillStyle = palette.hoverBg
+    context.strokeStyle = palette.hoverBorder
+    context.lineWidth = 1
+    roundRectPath(context, x - padX, data.y - size / 2 - padY, textWidth + padX * 2, size + padY * 2, 6)
+    context.fill()
+    context.stroke()
+    context.fillStyle = palette.label
+    context.fillText(data.label, x, y)
+  }
+
+  return { drawLabel, drawHover }
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -219,12 +348,16 @@ function GraphLoader({
   colorMode,
   nodeScale,
   graphSpacing,
+  isDark,
+  palette,
 }: {
   nodes: GraphNode[]
   edges: GraphEdge[]
   colorMode: ColorMode
   nodeScale: number
   graphSpacing: number
+  isDark: boolean
+  palette: GraphThemePalette
 }) {
   const loadGraph = useLoadGraph()
   const sigma = useSigma()
@@ -242,8 +375,8 @@ function GraphLoader({
     for (const node of nodes) {
       const cached = positionCache.get(node.id)
       const color = colorMode === "community"
-        ? COMMUNITY_COLORS[node.community % COMMUNITY_COLORS.length]
-        : nodeColor(node.type)
+        ? communityColor(node.community, isDark)
+        : nodeColor(node.type, isDark)
       graph.addNode(node.id, {
         type: "circle",
         x: cached?.x ?? Math.random() * 100,
@@ -266,9 +399,10 @@ function GraphLoader({
         if (!graph.hasEdge(edgeKey) && !graph.hasEdge(`${edge.target}->${edge.source}`)) {
           const normalizedWeight = edge.weight / maxWeight // 0..1
           const size = 0.5 + normalizedWeight * 3.5 // 0.5..4
-          // Stronger relationships → darker color
-          const alpha = Math.round(40 + normalizedWeight * 180) // 40..220
-          const color = `rgba(100,116,139,${alpha / 255})` // slate-500 with variable opacity
+          // Stronger relationships → more opaque. Base RGB is theme-aware so edges
+          // keep contrast on both the dark (lighter slate) and light (darker slate) canvas.
+          const alpha = (60 + normalizedWeight * 175) / 255 // ~0.235..0.92
+          const color = `rgba(${palette.edgeBaseRgb},${alpha.toFixed(3)})`
           graph.addEdgeWithKey(edgeKey, edge.source, edge.target, {
             color,
             size,
@@ -360,7 +494,7 @@ function GraphLoader({
       if (pendingLayoutDataKey === dataKey) pendingLayoutDataKey = ""
       worker?.terminate()
     }
-  }, [loadGraph, sigma, nodes, edges, colorMode, nodeScale, graphSpacing])
+  }, [loadGraph, sigma, nodes, edges, colorMode, nodeScale, graphSpacing, isDark, palette])
 
   return null
 }
@@ -402,6 +536,13 @@ function GraphRenderSettings({
         if (isHoverNode) {
           result.size = (attrs.size ?? BASE_NODE_SIZE) * 1.4
           result.zIndex = 10
+          result.forceLabel = true
+        }
+        // Neighbors of the hovered node stay un-dimmed; force their labels too so
+        // small (low-degree) neighbors don't fall below Sigma's label size/density
+        // thresholds and drop their label.
+        if (isHoverNeighbor && !isHoverNode) {
+          result.zIndex = 5
           result.forceLabel = true
         }
         if ((hasHover && !isHoverNode && !isHoverNeighbor) || (hasHighlight && !isHighlighted)) {
@@ -541,6 +682,7 @@ export function GraphView() {
   const openFileInPreview = useWikiStore((s) => s.openFileInPreview)
   const isDarkMode = useResolvedDarkMode()
   const graphPalette = useMemo(() => graphThemePalette(isDarkMode), [isDarkMode])
+  const labelRenderers = useMemo(() => makeLabelRenderers(graphPalette), [graphPalette])
 
   const [nodes, setNodes] = useState<GraphNode[]>([])
   const [edges, setEdges] = useState<GraphEdge[]>([])
@@ -1009,8 +1151,10 @@ export function GraphView() {
                     defaultEdgeColor: graphPalette.defaultEdge,
                     defaultNodeColor: "#94a3b8",
                     labelSize: 13,
-                    labelWeight: "bold",
+                    labelWeight: "600",
                     labelColor: { color: graphPalette.label },
+                    defaultDrawNodeLabel: labelRenderers.drawLabel,
+                    defaultDrawNodeHover: labelRenderers.drawHover,
                     stagePadding: 30,
                   }}
                 >
@@ -1020,6 +1164,8 @@ export function GraphView() {
                     colorMode={colorMode}
                     nodeScale={nodeScale}
                     graphSpacing={graphSpacing}
+                    isDark={isDarkMode}
+                    palette={graphPalette}
                   />
                   <EventHandler
                     onNodeClick={handleNodeClick}
@@ -1298,8 +1444,8 @@ export function GraphView() {
                             <span
                               className="inline-block h-3 w-3 rounded-full shrink-0 shadow-sm"
                               style={{
-                                backgroundColor: isHidden ? "#94a3b8" : nodeColor(type),
-                                boxShadow: `0 0 4px ${hexToRgba(isHidden ? "#94a3b8" : nodeColor(type), 0.4)}`,
+                                backgroundColor: isHidden ? "#94a3b8" : nodeColor(type, isDarkMode),
+                                boxShadow: `0 0 4px ${hexToRgba(isHidden ? "#94a3b8" : nodeColor(type, isDarkMode), 0.4)}`,
                               }}
                             />
                             <span className={hoveredType === type ? "text-foreground font-medium" : "text-muted-foreground"}>
@@ -1323,8 +1469,8 @@ export function GraphView() {
                       <span
                         className="inline-block h-3 w-3 rounded-full shrink-0 shadow-sm"
                         style={{
-                          backgroundColor: COMMUNITY_COLORS[c.id % COMMUNITY_COLORS.length],
-                          boxShadow: `0 0 4px ${hexToRgba(COMMUNITY_COLORS[c.id % COMMUNITY_COLORS.length], 0.4)}`,
+                          backgroundColor: communityColor(c.id, isDarkMode),
+                          boxShadow: `0 0 4px ${hexToRgba(communityColor(c.id, isDarkMode), 0.4)}`,
                         }}
                       />
                       <span className="text-muted-foreground truncate" title={c.topNodes.join(", ")}>

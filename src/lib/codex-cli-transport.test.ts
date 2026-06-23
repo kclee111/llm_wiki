@@ -27,7 +27,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: tauriMocks.listen,
 }))
 
-import { buildPrompt, parseCodexCliLine, streamCodexCli } from "./codex-cli-transport"
+import { buildPrompt, parseCodexCliLine, reasoningModeToCodexEffort, streamCodexCli } from "./codex-cli-transport"
 import { useWikiStore } from "@/stores/wiki-store"
 
 beforeEach(() => {
@@ -58,6 +58,28 @@ describe("parseCodexCliLine", () => {
   it("ignores lifecycle events and malformed lines", () => {
     expect(parseCodexCliLine('{"type":"turn.started"}')).toBeNull()
     expect(parseCodexCliLine("not json")).toBeNull()
+  })
+})
+
+describe("reasoningModeToCodexEffort", () => {
+  it("maps off to the lowest bounded effort to prevent reasoning runaway", () => {
+    expect(reasoningModeToCodexEffort("off")).toBe("low")
+  })
+
+  it("passes explicit effort levels straight through", () => {
+    expect(reasoningModeToCodexEffort("low")).toBe("low")
+    expect(reasoningModeToCodexEffort("medium")).toBe("medium")
+    expect(reasoningModeToCodexEffort("high")).toBe("high")
+  })
+
+  it("clamps max to high since Codex has no higher tier", () => {
+    expect(reasoningModeToCodexEffort("max")).toBe("high")
+  })
+
+  it("omits the flag for auto, custom, and undefined so Codex keeps its default", () => {
+    expect(reasoningModeToCodexEffort("auto")).toBeUndefined()
+    expect(reasoningModeToCodexEffort("custom")).toBeUndefined()
+    expect(reasoningModeToCodexEffort(undefined)).toBeUndefined()
   })
 })
 
@@ -370,6 +392,119 @@ describe("streamCodexCli", () => {
     expect(callbacks.onError).not.toHaveBeenCalled()
   })
 
+  it("passes the configured reasoning effort to the Rust transport", async () => {
+    const callbacks = {
+      onToken: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    const stream = streamCodexCli(
+      {
+        provider: "codex-cli",
+        apiKey: "",
+        model: "gpt-5.1-codex-mini",
+        ollamaUrl: "",
+        customEndpoint: "",
+        maxContextSize: 128000,
+        reasoning: { mode: "off" },
+      },
+      [{ role: "user", content: "Analyze this source." }],
+      callbacks,
+    )
+
+    await vi.waitFor(() => {
+      expect(tauriMocks.invoke).toHaveBeenCalledTimes(1)
+    })
+    expect(tauriMocks.invoke).toHaveBeenCalledWith(
+      "codex_cli_spawn",
+      expect.objectContaining({ reasoningEffort: "low" }),
+    )
+
+    const payload = tauriMocks.invoke.mock.calls[0]?.[1] as { streamId: string }
+    tauriMocks.emit(
+      `codex-cli:${payload.streamId}`,
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "ok" } }),
+    )
+    tauriMocks.emit(`codex-cli:${payload.streamId}:done`, { code: 0, stderr: "" })
+    await stream
+  })
+
+  it("lets a per-request reasoning override win over the stored config", async () => {
+    const callbacks = {
+      onToken: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    const stream = streamCodexCli(
+      {
+        provider: "codex-cli",
+        apiKey: "",
+        model: "gpt-5.1-codex-mini",
+        ollamaUrl: "",
+        customEndpoint: "",
+        maxContextSize: 128000,
+        reasoning: { mode: "off" },
+      },
+      [{ role: "user", content: "Analyze this source." }],
+      callbacks,
+      undefined,
+      { reasoning: { mode: "high" } },
+    )
+
+    await vi.waitFor(() => {
+      expect(tauriMocks.invoke).toHaveBeenCalledTimes(1)
+    })
+    expect(tauriMocks.invoke).toHaveBeenCalledWith(
+      "codex_cli_spawn",
+      expect.objectContaining({ reasoningEffort: "high" }),
+    )
+
+    const payload = tauriMocks.invoke.mock.calls[0]?.[1] as { streamId: string }
+    tauriMocks.emit(
+      `codex-cli:${payload.streamId}`,
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "ok" } }),
+    )
+    tauriMocks.emit(`codex-cli:${payload.streamId}:done`, { code: 0, stderr: "" })
+    await stream
+  })
+
+  it("omits reasoning effort when no reasoning preference is set", async () => {
+    const callbacks = {
+      onToken: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    const stream = streamCodexCli(
+      {
+        provider: "codex-cli",
+        apiKey: "",
+        model: "gpt-5.1-codex-mini",
+        ollamaUrl: "",
+        customEndpoint: "",
+        maxContextSize: 128000,
+      },
+      [{ role: "user", content: "Analyze this source." }],
+      callbacks,
+    )
+
+    await vi.waitFor(() => {
+      expect(tauriMocks.invoke).toHaveBeenCalledTimes(1)
+    })
+    const spawnPayload = tauriMocks.invoke.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(spawnPayload.reasoningEffort).toBeUndefined()
+
+    const payload = spawnPayload as { streamId: string }
+    tauriMocks.emit(
+      `codex-cli:${payload.streamId}`,
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "ok" } }),
+    )
+    tauriMocks.emit(`codex-cli:${payload.streamId}:done`, { code: 0, stderr: "" })
+    await stream
+  })
+
   it("surfaces a clear error when Codex CLI has no active project directory", async () => {
     useWikiStore.setState({ project: null })
     const callbacks = {
@@ -445,7 +580,7 @@ describe("streamCodexCli", () => {
     expect(callbacks.onError).not.toHaveBeenCalled()
   })
 
-  it("surfaces a clear error when completion has no agent message", async () => {
+  it("retries once and surfaces an error when both completions are empty", async () => {
     const callbacks = {
       onToken: vi.fn(),
       onDone: vi.fn(),
@@ -468,9 +603,25 @@ describe("streamCodexCli", () => {
     await vi.waitFor(() => {
       expect(tauriMocks.invoke).toHaveBeenCalledTimes(1)
     })
+    const first = tauriMocks.invoke.mock.calls[0]?.[1] as { streamId: string }
+    tauriMocks.emit(`codex-cli:${first.streamId}:done`, {
+      code: 0,
+      stderr: "",
+      stdout: JSON.stringify({ type: "turn.completed" }),
+    })
 
-    const payload = tauriMocks.invoke.mock.calls[0]?.[1] as { streamId: string }
-    tauriMocks.emit(`codex-cli:${payload.streamId}:done`, {
+    // First empty completion must trigger exactly one retry (a second spawn).
+    await vi.waitFor(() => {
+      expect(tauriMocks.invoke).toHaveBeenCalledWith("codex_cli_spawn", expect.anything())
+      expect(
+        tauriMocks.invoke.mock.calls.filter((c) => c[0] === "codex_cli_spawn"),
+      ).toHaveLength(2)
+    })
+    const second = tauriMocks.invoke.mock.calls.filter((c) => c[0] === "codex_cli_spawn")[1]?.[1] as {
+      streamId: string
+    }
+    expect(second.streamId).not.toBe(first.streamId)
+    tauriMocks.emit(`codex-cli:${second.streamId}:done`, {
       code: 0,
       stderr: "",
       stdout: JSON.stringify({ type: "turn.completed" }),
@@ -481,11 +632,64 @@ describe("streamCodexCli", () => {
     expect(callbacks.onToken).not.toHaveBeenCalled()
     expect(callbacks.onDone).not.toHaveBeenCalled()
     expect(callbacks.onError).toHaveBeenCalledTimes(1)
-    expect(callbacks.onError.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        message: expect.stringContaining("completed but did not emit an agent_message"),
-      }),
+    const message = (callbacks.onError.mock.calls[0]?.[0] as Error).message
+    // Names the failure, that a retry already happened, and the two fixes.
+    expect(message).toMatch(/empty response/i)
+    expect(message).toMatch(/retry|retried|again/i)
+    expect(message).toMatch(/reasoning effort/i)
+    expect(message).toMatch(/model/i)
+  })
+
+  it("recovers when a retry after an empty completion emits an agent message", async () => {
+    const callbacks = {
+      onToken: vi.fn(),
+      onDone: vi.fn(),
+      onError: vi.fn(),
+    }
+
+    const stream = streamCodexCli(
+      {
+        provider: "codex-cli",
+        apiKey: "",
+        model: "gpt-5.1-codex-mini",
+        ollamaUrl: "",
+        customEndpoint: "",
+        maxContextSize: 128000,
+      },
+      [{ role: "user", content: "Analyze this source." }],
+      callbacks,
     )
+
+    await vi.waitFor(() => {
+      expect(tauriMocks.invoke).toHaveBeenCalledTimes(1)
+    })
+    const first = tauriMocks.invoke.mock.calls[0]?.[1] as { streamId: string }
+    tauriMocks.emit(`codex-cli:${first.streamId}:done`, {
+      code: 0,
+      stderr: "",
+      stdout: JSON.stringify({ type: "turn.completed" }),
+    })
+
+    await vi.waitFor(() => {
+      expect(
+        tauriMocks.invoke.mock.calls.filter((c) => c[0] === "codex_cli_spawn"),
+      ).toHaveLength(2)
+    })
+    const second = tauriMocks.invoke.mock.calls.filter((c) => c[0] === "codex_cli_spawn")[1]?.[1] as {
+      streamId: string
+    }
+    tauriMocks.emit(
+      `codex-cli:${second.streamId}`,
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "second-try analysis" } }),
+    )
+    tauriMocks.emit(`codex-cli:${second.streamId}:done`, { code: 0, stderr: "" })
+
+    await stream
+
+    expect(callbacks.onToken).toHaveBeenCalledTimes(1)
+    expect(callbacks.onToken).toHaveBeenCalledWith("second-try analysis")
+    expect(callbacks.onDone).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).not.toHaveBeenCalled()
   })
 
   it("does not spawn when the signal is already aborted", async () => {
