@@ -6,9 +6,6 @@ import { useResearchStore } from "@/stores/research-store"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { useWikiStore } from "@/stores/wiki-store"
 
-const AUTO_DEEP_RESEARCH_BATCH_LIMIT = 1
-const ACTIVE_RESEARCH_STATUSES = new Set(["queued", "searching", "synthesizing", "saving"])
-
 let unsubscribeReview: (() => void) | null = null
 let unsubscribeResearch: (() => void) | null = null
 let unsubscribeProject: (() => void) | null = null
@@ -34,20 +31,14 @@ function topicForReview(item: ReviewItem): string {
   )
 }
 
-function hasActiveAutoReviewResearch(): boolean {
-  return useResearchStore.getState().tasks.some((task) =>
-    task.triggerMetadata?.trigger === "auto-review" &&
-    ACTIVE_RESEARCH_STATUSES.has(task.status)
-  )
-}
-
 export function runAutoDeepResearchForReviews(
   items: ReviewItem[],
   attemptedIds: Set<string> = attemptedReviewIds,
 ): number {
   const researchStore = useResearchStore.getState()
   if (!researchStore.autoDeepResearchEnabled) return 0
-  if (hasActiveAutoReviewResearch()) return 0
+  const availableSlots = researchStore.maxConcurrent - researchStore.getRunningCount()
+  if (availableSlots <= 0) return 0
 
   const wikiStore = useWikiStore.getState()
   if (!wikiStore.project) return 0
@@ -56,7 +47,7 @@ export function runAutoDeepResearchForReviews(
 
   let queued = 0
   const candidates = selectAutoDeepResearchCandidates(items, attemptedIds)
-  for (const item of candidates.slice(0, AUTO_DEEP_RESEARCH_BATCH_LIMIT)) {
+  for (const item of candidates.slice(0, availableSlots)) {
     attemptedIds.add(item.id)
     queueResearch(
       normalizePath(wikiStore.project.path),
