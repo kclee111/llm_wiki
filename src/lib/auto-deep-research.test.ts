@@ -90,7 +90,7 @@ describe("selectAutoDeepResearchCandidates", () => {
 })
 
 describe("runAutoDeepResearchForReviews", () => {
-  it("queues selected reviews and resolves them as automatically queued", () => {
+  it("queues selected reviews without resolving the original review item", () => {
     const items = [review({ id: "review-1" })]
     useReviewStore.getState().setItems(items)
     useResearchStore.getState().setAutoDeepResearchEnabled(true)
@@ -111,9 +111,9 @@ describe("runAutoDeepResearchForReviews", () => {
       },
     )
     expect(useReviewStore.getState().items[0]).toMatchObject({
-      resolved: true,
-      resolvedAction: "Auto queued for deep research",
+      resolved: false,
     })
+    expect(useReviewStore.getState().items[0]).not.toHaveProperty("resolvedAction")
   })
 
   it("does nothing when auto Deep Research is disabled", () => {
@@ -126,7 +126,7 @@ describe("runAutoDeepResearchForReviews", () => {
     expect(useReviewStore.getState().items[0].resolved).toBe(false)
   })
 
-  it("queues at most one review from a batch and marks the rest attempted", () => {
+  it("queues one review at a time and leaves the rest eligible for later runs", () => {
     const attempted = new Set<string>()
     const items = [
       review({ id: "review-1", title: "Research alpha", searchQueries: ["alpha query"] }),
@@ -136,9 +136,9 @@ describe("runAutoDeepResearchForReviews", () => {
     useResearchStore.getState().setAutoDeepResearchEnabled(true)
 
     expect(runAutoDeepResearchForReviews(items, attempted)).toBe(1)
-    expect(runAutoDeepResearchForReviews(items, attempted)).toBe(0)
+    expect(runAutoDeepResearchForReviews(items, attempted)).toBe(1)
 
-    expect(queueResearch).toHaveBeenCalledTimes(1)
+    expect(queueResearch).toHaveBeenCalledTimes(2)
     expect(queueResearch).toHaveBeenCalledWith(
       "/project",
       "alpha",
@@ -151,11 +151,53 @@ describe("runAutoDeepResearchForReviews", () => {
         sourceReviewId: "review-1",
       }),
     )
+    expect(queueResearch).toHaveBeenCalledWith(
+      "/project",
+      "beta",
+      expect.any(Object),
+      expect.any(Object),
+      ["beta query"],
+      expect.objectContaining({
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: "review-2",
+      }),
+    )
+  })
+
+  it("does not queue another review while an auto review research task is active", () => {
+    const items = [
+      review({ id: "review-1", title: "Research alpha", searchQueries: ["alpha query"] }),
+      review({ id: "review-2", title: "Research beta", searchQueries: ["beta query"] }),
+    ]
+    useReviewStore.getState().setItems(items)
+    useResearchStore.setState({
+      autoDeepResearchEnabled: true,
+      tasks: [
+        {
+          id: "research-1",
+          topic: "alpha",
+          searchQueries: ["alpha query"],
+          reviewExpansion: false,
+          triggerMetadata: { trigger: "auto-review", autoQueued: true, sourceReviewId: "review-1" },
+          status: "searching",
+          webResults: [],
+          synthesis: "",
+          savedPath: null,
+          error: null,
+          createdAt: 0,
+        },
+      ],
+    })
+
+    expect(runAutoDeepResearchForReviews(items, new Set(["review-1"]))).toBe(0)
+
+    expect(queueResearch).not.toHaveBeenCalled()
   })
 })
 
 describe("setupAutoDeepResearch", () => {
-  it("does not backfill existing review items when auto Deep Research is enabled", () => {
+  it("queues an existing unresolved review item when auto Deep Research is enabled", () => {
     useReviewStore.getState().setItems([
       review({ id: "old-1", title: "Research old", searchQueries: ["old query"] }),
     ])
@@ -163,7 +205,18 @@ describe("setupAutoDeepResearch", () => {
 
     useResearchStore.getState().setAutoDeepResearchEnabled(true)
 
-    expect(queueResearch).not.toHaveBeenCalled()
+    expect(queueResearch).toHaveBeenCalledWith(
+      "/project",
+      "old",
+      expect.objectContaining({ model: "gpt-4" }),
+      expect.objectContaining({ provider: "tavily" }),
+      ["old query"],
+      expect.objectContaining({
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: "old-1",
+      }),
+    )
     expect(useReviewStore.getState().items[0].resolved).toBe(false)
   })
 
@@ -195,8 +248,8 @@ describe("setupAutoDeepResearch", () => {
       },
     )
     expect(useReviewStore.getState().items[0]).toMatchObject({
-      resolved: true,
-      resolvedAction: "Auto queued for deep research",
+      resolved: false,
     })
+    expect(useReviewStore.getState().items[0]).not.toHaveProperty("resolvedAction")
   })
 })
