@@ -1,6 +1,10 @@
 import { create } from "zustand"
 import type { WebSearchResult } from "@/lib/web-search"
 import type { ResearchTriggerMetadata } from "@/lib/research-history"
+import {
+  DEFAULT_AUTO_GRAPH_RESEARCH_LIMIT,
+  clampAutoGraphResearchLimit,
+} from "@/lib/auto-graph-research"
 
 export interface ResearchTask {
   id: string
@@ -27,6 +31,7 @@ interface ResearchState {
   maxConcurrent: number
   reviewExpansionEnabled: boolean
   autoDeepResearchEnabled: boolean
+  autoGraphResearchLimit: number
 
   addTask: (topic: string, triggerMetadata?: ResearchTriggerMetadata) => string
   updateTask: (id: string, updates: Partial<ResearchTask>) => void
@@ -35,6 +40,7 @@ interface ResearchState {
   setPanelOpen: (open: boolean) => void
   setReviewExpansionEnabled: (enabled: boolean) => void
   setAutoDeepResearchEnabled: (enabled: boolean) => void
+  setAutoGraphResearchLimit: (limit: number) => void
   getRunningCount: () => number
   getNextQueued: () => ResearchTask | undefined
 }
@@ -47,6 +53,7 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   maxConcurrent: 3,
   reviewExpansionEnabled: false,
   autoDeepResearchEnabled: false,
+  autoGraphResearchLimit: DEFAULT_AUTO_GRAPH_RESEARCH_LIMIT,
 
   addTask: (topic, triggerMetadata) => {
     const id = `research-${++counter}`
@@ -96,6 +103,9 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   setReviewExpansionEnabled: (reviewExpansionEnabled) => set({ reviewExpansionEnabled }),
 
   setAutoDeepResearchEnabled: (autoDeepResearchEnabled) => set({ autoDeepResearchEnabled }),
+
+  setAutoGraphResearchLimit: (autoGraphResearchLimit) =>
+    set({ autoGraphResearchLimit: clampAutoGraphResearchLimit(autoGraphResearchLimit) }),
 
   getRunningCount: () => {
     const { tasks } = get()

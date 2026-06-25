@@ -16,7 +16,13 @@ import { findSurprisingConnections, detectKnowledgeGaps, type SurprisingConnecti
 import { queueResearch } from "@/lib/deep-research"
 import { optimizeResearchTopic } from "@/lib/optimize-research-topic"
 import { normalizePath } from "@/lib/path-utils"
-import { knowledgeGapAutoResearchKey, selectAutoGraphResearchCandidates } from "@/lib/auto-graph-research"
+import {
+  advanceAutoGraphResearchQueuedCount,
+  getAutoGraphResearchBatchLimit,
+  knowledgeGapAutoResearchKey,
+  releaseAutoGraphResearchAttemptedKeys,
+  selectAutoGraphResearchCandidates,
+} from "@/lib/auto-graph-research"
 import { applyGraphFilters, hasActiveGraphFilters } from "@/lib/graph-filters"
 import { applyGraphSearch } from "@/lib/graph-search"
 import { wikiTypeLabel } from "@/lib/wiki-page-types"
@@ -692,6 +698,9 @@ export function GraphView() {
   const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
   const autoDeepResearchEnabled = useResearchStore((s) => s.autoDeepResearchEnabled)
   const setAutoDeepResearchEnabled = useResearchStore((s) => s.setAutoDeepResearchEnabled)
+  const autoGraphResearchLimit = useResearchStore((s) => s.autoGraphResearchLimit)
+  const setAutoGraphResearchLimit = useResearchStore((s) => s.setAutoGraphResearchLimit)
+  const maxConcurrentResearch = useResearchStore((s) => s.maxConcurrent)
   const runningResearchCount = useResearchStore((s) => s.getRunningCount())
   const isDarkMode = useResolvedDarkMode()
   const graphPalette = useMemo(() => graphThemePalette(isDarkMode), [isDarkMode])
@@ -723,6 +732,9 @@ export function GraphView() {
   const [nodeTypeLabels, setNodeTypeLabels] = useState<Record<string, string>>({})
   const graphSearchInputRef = useRef<HTMLInputElement>(null)
   const autoGraphResearchAttemptedRef = useRef<Set<string>>(new Set())
+  const autoGraphResearchProcessedRef = useRef(0)
+  const [autoGraphResearchProcessedCount, setAutoGraphResearchProcessedCount] = useState(0)
+  const previousAutoGraphResearchEnabledRef = useRef(autoDeepResearchEnabled)
 
   // Research confirmation dialog
   const [researchDialog, setResearchDialog] = useState<{
@@ -830,6 +842,19 @@ export function GraphView() {
     [dismissedInsights, knowledgeGaps, knowledgeGapKey],
   )
 
+  const autoGraphResearchRemainingBudget = Math.max(0, autoGraphResearchLimit - autoGraphResearchProcessedCount)
+  const autoGraphResearchSlots = getAutoGraphResearchBatchLimit(
+    maxConcurrentResearch,
+    runningResearchCount,
+    autoGraphResearchRemainingBudget,
+  )
+  const eligibleAutoGraphInsightCount = selectAutoGraphResearchCandidates(visibleKnowledgeGaps, {
+    attemptedKeys: autoGraphResearchAttemptedRef.current,
+    dismissedKeys: dismissedInsights,
+    limit: visibleKnowledgeGaps.length,
+    remainingBudget: autoGraphResearchRemainingBudget,
+  }).length
+
   const dismissInsight = useCallback((key: string, ids?: Set<string>) => {
     setDismissedInsights((prev) => new Set([...prev, key]))
     if (ids && highlightedNodes.size === ids.size && [...ids].every((id) => highlightedNodes.has(id))) {
@@ -896,62 +921,122 @@ export function GraphView() {
   }, [researchDialog])
 
   useEffect(() => {
+    if (autoDeepResearchEnabled && !previousAutoGraphResearchEnabledRef.current) {
+      autoGraphResearchProcessedRef.current = 0
+      setAutoGraphResearchProcessedCount(0)
+    }
+    if (!autoDeepResearchEnabled) {
+      autoGraphResearchProcessedRef.current = 0
+      setAutoGraphResearchProcessedCount(0)
+    }
+    previousAutoGraphResearchEnabledRef.current = autoDeepResearchEnabled
+  }, [autoDeepResearchEnabled])
+
+  useEffect(() => {
     if (!autoDeepResearchEnabled) return
     if (researchDialog) return
-    if (runningResearchCount > 0) return
+    const remainingBudget = autoGraphResearchLimit - autoGraphResearchProcessedRef.current
+    if (remainingBudget <= 0) {
+      setAutoDeepResearchEnabled(false)
+      return
+    }
+    const batchLimit = getAutoGraphResearchBatchLimit(maxConcurrentResearch, runningResearchCount, remainingBudget)
+    if (batchLimit <= 0) return
     const candidates = selectAutoGraphResearchCandidates(visibleKnowledgeGaps, {
       attemptedKeys: autoGraphResearchAttemptedRef.current,
       dismissedKeys: dismissedInsights,
-      limit: 1,
+      limit: batchLimit,
+      remainingBudget,
     })
-    const gap = candidates[0]
-    if (!gap) return
-    const key = knowledgeGapKey(gap)
-    autoGraphResearchAttemptedRef.current.add(key)
+    if (candidates.length === 0) return
+    const queuedItems = candidates.map((gap) => {
+      const key = knowledgeGapKey(gap)
+      autoGraphResearchAttemptedRef.current.add(key)
+      return { gap, key }
+    })
 
     let cancelled = false
-    async function run() {
+    let didQueue = false
+    let releasedPendingKeys = false
+    const releasePendingKeys = () => {
+      if (didQueue || releasedPendingKeys) return
+      releaseAutoGraphResearchAttemptedKeys(
+        autoGraphResearchAttemptedRef.current,
+        queuedItems.map((item) => item.key),
+      )
+      releasedPendingKeys = true
+    }
+    async function runBatch() {
       const store = useWikiStore.getState()
-      if (!store.project) return
+      if (!store.project) {
+        releasePendingKeys()
+        return
+      }
       const pp = normalizePath(store.project.path)
       let overview = ""
       let purpose = ""
       try { overview = await readFile(`${pp}/wiki/overview.md`) } catch {}
       try { purpose = await readFile(`${pp}/purpose.md`) } catch {}
-      let topic = gap.title
-      let queries = [gap.title]
-      try {
-        const result = await optimizeResearchTopic(
-          store.llmConfig,
-          gap.title,
-          gap.description,
-          gap.type,
-          overview,
-          purpose,
-        )
-        topic = result.topic
-        queries = result.searchQueries
-      } catch {
-        // fallback topic and query are already set
+      const preparedItems = await Promise.all(queuedItems.map(async ({ gap, key }) => {
+        let topic = gap.title
+        let queries = [gap.title]
+        try {
+          const result = await optimizeResearchTopic(
+            store.llmConfig,
+            gap.title,
+            gap.description,
+            gap.type,
+            overview,
+            purpose,
+          )
+          topic = result.topic
+          queries = result.searchQueries
+        } catch {
+          // fallback topic and query are already set
+        }
+        return { gap, key, topic, queries }
+      }))
+      if (cancelled) {
+        releasePendingKeys()
+        return
       }
-      if (cancelled) return
-      queueResearch(pp, topic, store.llmConfig, store.searchApiConfig, queries, {
-        trigger: "graph-insight",
-        autoQueued: true,
-        graphInsightTitle: gap.title,
-        graphInsightType: gap.type,
-      })
-      setDismissedInsights((prev) => new Set([...prev, key]))
+      let actualQueuedCount = 0
+      for (const item of preparedItems) {
+        queueResearch(pp, item.topic, store.llmConfig, store.searchApiConfig, item.queries, {
+          trigger: "graph-insight",
+          autoQueued: true,
+          graphInsightTitle: item.gap.title,
+          graphInsightType: item.gap.type,
+        })
+        actualQueuedCount += 1
+      }
+      didQueue = actualQueuedCount > 0
+      const processedCount = advanceAutoGraphResearchQueuedCount(
+        autoGraphResearchProcessedRef.current,
+        actualQueuedCount,
+      )
+      autoGraphResearchProcessedRef.current = processedCount
+      setAutoGraphResearchProcessedCount(processedCount)
+      setDismissedInsights((prev) => new Set([...prev, ...preparedItems.map((item) => item.key)]))
       setHighlightedNodes(new Set())
+      if (processedCount >= autoGraphResearchLimit) {
+        setAutoDeepResearchEnabled(false)
+      }
     }
-    run()
-    return () => { cancelled = true }
+    runBatch()
+    return () => {
+      cancelled = true
+      releasePendingKeys()
+    }
   }, [
     autoDeepResearchEnabled,
+    autoGraphResearchLimit,
     dismissedInsights,
     knowledgeGapKey,
+    maxConcurrentResearch,
     researchDialog,
     runningResearchCount,
+    setAutoDeepResearchEnabled,
     visibleKnowledgeGaps,
   ])
 
@@ -1563,7 +1648,7 @@ export function GraphView() {
                   <Lightbulb className="h-4 w-4 text-amber-500" />
                   <span className="text-sm font-medium">{t("graph.insights")}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-end gap-2 flex-wrap">
                   <label
                     className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none"
                     title={t("research.autoDeepResearchHint")}
@@ -1576,6 +1661,20 @@ export function GraphView() {
                     />
                     <span>{t("research.autoDeepResearch")}</span>
                   </label>
+                  <label
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                    title={t("graph.maxAutoInsightsHint")}
+                  >
+                    <span>{t("graph.maxAutoInsights")}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={autoGraphResearchLimit}
+                      onChange={(event) => setAutoGraphResearchLimit(Number(event.currentTarget.value))}
+                      className="h-6 w-14 rounded border bg-background px-1.5 text-xs text-foreground"
+                    />
+                  </label>
                   <button
                     className="p-1 rounded hover:bg-muted text-muted-foreground"
                     onClick={() => {
@@ -1587,6 +1686,16 @@ export function GraphView() {
                   </button>
                 </div>
               </div>
+              {autoDeepResearchEnabled && (
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  {t("graph.autoInsightStatus", {
+                    eligible: eligibleAutoGraphInsightCount,
+                    slots: autoGraphResearchSlots,
+                    queued: autoGraphResearchProcessedCount,
+                    max: autoGraphResearchLimit,
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="p-3 flex flex-col gap-4">
