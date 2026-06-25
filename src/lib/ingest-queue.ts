@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "@/commands/fs"
-import { autoIngest } from "./ingest"
+import { autoIngest, type IngestReviewMode } from "./ingest"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
 import { normalizePath, isAbsolutePath } from "@/lib/path-utils"
@@ -18,6 +18,7 @@ export interface IngestTask {
   sourceKind?: "raw-source" | "research-result" | "manual-save"
   createdBy?: "file-sync" | "deep-research" | "user"
   researchTaskId?: string
+  reviewMode?: IngestReviewMode
   folderContext: string  // e.g. "AI-Research > papers" or ""
   status: "pending" | "processing" | "done" | "failed"
   addedAt: number
@@ -29,6 +30,7 @@ export interface EnqueueIngestOptions {
   sourceKind?: IngestTask["sourceKind"]
   createdBy?: IngestTask["createdBy"]
   researchTaskId?: string
+  reviewMode?: IngestReviewMode
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -134,6 +136,7 @@ function upsertQueuedIngestTask(
     pendingOrFailed.sourceKind = options.sourceKind ?? pendingOrFailed.sourceKind
     pendingOrFailed.createdBy = options.createdBy ?? pendingOrFailed.createdBy
     pendingOrFailed.researchTaskId = options.researchTaskId ?? pendingOrFailed.researchTaskId
+    pendingOrFailed.reviewMode = options.reviewMode ?? pendingOrFailed.reviewMode
     pendingOrFailed.status = "pending"
     pendingOrFailed.error = null
     pendingOrFailed.retryCount = 0
@@ -164,6 +167,7 @@ function upsertQueuedIngestTask(
     sourceKind: options.sourceKind,
     createdBy: options.createdBy,
     researchTaskId: options.researchTaskId,
+    reviewMode: options.reviewMode,
     folderContext,
     status: "pending",
     addedAt: Date.now(),
@@ -616,7 +620,14 @@ async function processNext(projectId: string): Promise<void> {
   lastWrittenFiles = []
 
   try {
-    const writtenFiles = await autoIngest(pp, fullSourcePath, llmConfig, currentAbortController.signal, next.folderContext)
+    const writtenFiles = await autoIngest(
+      pp,
+      fullSourcePath,
+      llmConfig,
+      currentAbortController.signal,
+      next.folderContext,
+      { reviewMode: next.reviewMode },
+    )
     // Stale-context guard: project switched during the long LLM call.
     // Bail without mutating queue or writing to disk — pauseQueue has
     // already persisted the correct state to the old project's file,

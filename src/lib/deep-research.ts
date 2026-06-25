@@ -345,10 +345,13 @@ async function executeResearch(
       const projectId = useWikiStore.getState().project?.id
       if (projectId) {
         try {
+          const task = useResearchStore.getState().tasks.find((t) => t.id === taskId)
+          const reviewMode = task?.reviewExpansion ? "expanded" : "suppressed"
           const ingestTaskId = await enqueueIngest(projectId, savedPath, "Deep Research result", {
             sourceKind: "research-result",
             createdBy: "deep-research",
             researchTaskId: taskId,
+            reviewMode,
           })
           updateTaskIfActive(pp, taskId, {
             followUpIngest: { status: "queued", ingestTaskId, error: null },

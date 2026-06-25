@@ -163,6 +163,7 @@ describe("ingest-queue — enqueue & basic processing", () => {
       tasks: [{
         id: "research-1",
         topic: "alpha",
+        reviewExpansion: false,
         status: "done",
         webResults: [],
         synthesis: "synthesis",

@@ -226,6 +226,8 @@
   "review": {
     "title": "待审阅",
     "clearResolved": "清除已解决",
+    "reviewExpansion": "允许扩展待审阅项",
+    "reviewExpansionHint": "启用后，Deep Research 的后续提取可以继续生成新的待审阅项。",
     "allClear": "一切正常，无需审阅",
     "resolvedDivider": "— 已解决 —"
   },

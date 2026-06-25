@@ -487,6 +487,39 @@ describe("autoIngest source summary paths", () => {
     expect(reviews[0].description).not.toContain("Truncated Orphan")
   })
 
+  it("suppresses generation and dedicated review-stage blocks when review mode is suppressed", async () => {
+    if (!tmp) throw new Error("missing temp project")
+    sourceMarkers = ["project-a config"]
+    generationSuffix = [
+      "",
+      "---REVIEW: missing-page | Should Be Suppressed---",
+      "No review should be stored.",
+      "OPTIONS: Create Page | Skip",
+      "SEARCH: suppressed query",
+      "---END REVIEW---",
+      "",
+      "X".repeat(10_500),
+    ].join("\n")
+    extraReviewResponse = [
+      "---REVIEW: suggestion | Dedicated Should Be Suppressed---",
+      "No dedicated review should be stored.",
+      "OPTIONS: Create Page | Skip",
+      "SEARCH: dedicated suppressed query",
+      "---END REVIEW---",
+    ].join("\n")
+
+    await autoIngest(
+      tmp.path,
+      `${tmp.path}/raw/sources/project-a/config.yaml`,
+      { ...useWikiStore.getState().llmConfig, maxContextSize: 128_000 },
+      undefined,
+      "project-a",
+      { reviewMode: "suppressed" },
+    )
+
+    expect(useReviewStore.getState().items).toHaveLength(0)
+  })
+
   it("propagates cancellation that happens during the dedicated review stage", async () => {
     if (!tmp) throw new Error("missing temp project")
     sourceMarkers = ["project-a config"]

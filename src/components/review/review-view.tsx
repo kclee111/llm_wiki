@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
+import { useResearchStore } from "@/stores/research-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { writeFile, readFile, listDirectory, deleteFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
@@ -36,6 +37,8 @@ export function ReviewView() {
   const resolveItem = useReviewStore((s) => s.resolveItem)
   const dismissItem = useReviewStore((s) => s.dismissItem)
   const clearResolved = useReviewStore((s) => s.clearResolved)
+  const reviewExpansionEnabled = useResearchStore((s) => s.reviewExpansionEnabled)
+  const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
   const project = useWikiStore((s) => s.project)
   const setFileTree = useWikiStore((s) => s.setFileTree)
 
@@ -252,12 +255,26 @@ export function ReviewView() {
             </span>
           )}
         </h2>
-        {resolved.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearResolved} className="text-xs">
-            <Trash2 className="mr-1 h-3 w-3" />
-            {t("review.clearResolved")}
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          <label
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            title={t("review.reviewExpansionHint")}
+          >
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-primary"
+              checked={reviewExpansionEnabled}
+              onChange={(event) => setReviewExpansionEnabled(event.currentTarget.checked)}
+            />
+            <span>{t("review.reviewExpansion")}</span>
+          </label>
+          {resolved.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearResolved} className="text-xs">
+              <Trash2 className="mr-1 h-3 w-3" />
+              {t("review.clearResolved")}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

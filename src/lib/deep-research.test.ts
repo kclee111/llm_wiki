@@ -72,7 +72,7 @@ beforeEach(() => {
   vi.mocked(enqueueIngest).mockReset()
   vi.mocked(streamChat).mockReset()
   vi.mocked(webSearch).mockReset()
-  useResearchStore.setState({ tasks: [], panelOpen: false })
+  useResearchStore.setState({ tasks: [], panelOpen: false, reviewExpansionEnabled: false })
   useWikiStore.getState().setProject({
     id: "project-id",
     name: "Project",
@@ -287,7 +287,8 @@ describe("queueResearch follow-up ingest", () => {
       {
         sourceKind: "research-result",
         createdBy: "deep-research",
-        researchTaskId: "research-1",
+        researchTaskId: expect.any(String),
+        reviewMode: "suppressed",
       },
     )
     const task = useResearchStore.getState().tasks[0]
@@ -295,5 +296,34 @@ describe("queueResearch follow-up ingest", () => {
       status: "queued",
       ingestTaskId: "ingest-research",
     })
+  })
+
+  it("allows review expansion for the follow-up ingest when the Review toggle is enabled", async () => {
+    vi.useFakeTimers()
+    vi.mocked(readFile).mockResolvedValue("# Index")
+    vi.mocked(writeFile).mockResolvedValue(undefined as unknown as void)
+    vi.mocked(enqueueIngest).mockResolvedValue("ingest-research")
+    vi.mocked(webSearch).mockResolvedValue([webResult])
+    vi.mocked(streamChat).mockImplementation(async (_llm, _messages, handlers) => {
+      handlers.onToken("synthesis")
+      handlers.onDone()
+    })
+    useResearchStore.getState().setReviewExpansionEnabled(true)
+
+    queueResearch("/project", "alpha", llmConfig, searchConfig, ["alpha"])
+    await vi.runOnlyPendingTimersAsync()
+    await vi.runOnlyPendingTimersAsync()
+    await Promise.resolve()
+
+    expect(enqueueIngest).toHaveBeenCalledWith(
+      "project-id",
+      expect.stringMatching(/^wiki\/queries\/research-alpha-/),
+      "Deep Research result",
+      expect.objectContaining({
+        sourceKind: "research-result",
+        createdBy: "deep-research",
+        reviewMode: "expanded",
+      }),
+    )
   })
 })

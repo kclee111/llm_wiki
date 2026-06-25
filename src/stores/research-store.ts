@@ -5,6 +5,7 @@ export interface ResearchTask {
   id: string
   topic: string
   searchQueries?: string[]
+  reviewExpansion: boolean
   status: "queued" | "searching" | "synthesizing" | "saving" | "done" | "error"
   webResults: WebSearchResult[]
   synthesis: string
@@ -22,12 +23,14 @@ interface ResearchState {
   tasks: ResearchTask[]
   panelOpen: boolean
   maxConcurrent: number
+  reviewExpansionEnabled: boolean
 
   addTask: (topic: string) => string
   updateTask: (id: string, updates: Partial<ResearchTask>) => void
   updateFollowUpIngest: (id: string, updates: NonNullable<ResearchTask["followUpIngest"]>) => void
   removeTask: (id: string) => void
   setPanelOpen: (open: boolean) => void
+  setReviewExpansionEnabled: (enabled: boolean) => void
   getRunningCount: () => number
   getNextQueued: () => ResearchTask | undefined
 }
@@ -38,15 +41,18 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   tasks: [],
   panelOpen: false,
   maxConcurrent: 3,
+  reviewExpansionEnabled: false,
 
   addTask: (topic) => {
     const id = `research-${++counter}`
+    const reviewExpansion = get().reviewExpansionEnabled
     set((state) => ({
       tasks: [
         ...state.tasks,
         {
           id,
           topic,
+          reviewExpansion,
           status: "queued",
           webResults: [],
           synthesis: "",
@@ -80,6 +86,8 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
     })),
 
   setPanelOpen: (panelOpen) => set({ panelOpen }),
+
+  setReviewExpansionEnabled: (reviewExpansionEnabled) => set({ reviewExpansionEnabled }),
 
   getRunningCount: () => {
     const { tasks } = get()

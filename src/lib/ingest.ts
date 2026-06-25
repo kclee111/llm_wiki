@@ -54,6 +54,12 @@ const REVIEW_STAGE_MIN_SIGNAL_CHARS = 10_000
 const REVIEW_STAGE_MIN_FILE_BLOCKS = 4
 const AGGREGATE_WIKI_PATHS = ["wiki/index.md", "wiki/overview.md", "wiki/log.md"] as const
 
+export type IngestReviewMode = "default" | "expanded" | "suppressed"
+
+export interface AutoIngestOptions {
+  reviewMode?: IngestReviewMode
+}
+
 function appendSavedImageRefsForCaption(content: string, images: SavedImage[]): string {
   if (images.length === 0) return content
   const refs = images
@@ -476,9 +482,10 @@ export async function autoIngest(
   llmConfig: LlmConfig,
   signal?: AbortSignal,
   folderContext?: string,
+  options: AutoIngestOptions = {},
 ): Promise<string[]> {
   return withProjectLock(normalizePath(projectPath), () =>
-    autoIngestImpl(projectPath, sourcePath, llmConfig, signal, folderContext),
+    autoIngestImpl(projectPath, sourcePath, llmConfig, signal, folderContext, options),
   )
 }
 
@@ -488,9 +495,11 @@ async function autoIngestImpl(
   llmConfig: LlmConfig,
   signal?: AbortSignal,
   folderContext?: string,
+  options: AutoIngestOptions = {},
 ): Promise<string[]> {
   const pp = normalizePath(projectPath)
   const sp = normalizePath(sourcePath)
+  const suppressReviews = options.reviewMode === "suppressed"
   const activity = useActivityStore.getState()
   const fileName = getFileName(sp)
   const sourceIdentity = sourceIdentityForPath(pp, sp)
@@ -888,7 +897,7 @@ async function autoIngestImpl(
   }
 
   let reviewSuggestionOutput = ""
-  if (!signal?.aborted && shouldRunDedicatedReviewStage(generation)) {
+  if (!suppressReviews && !signal?.aborted && shouldRunDedicatedReviewStage(generation)) {
     let reviewStageHadError = false
     try {
       await streamChat(
@@ -1097,10 +1106,12 @@ async function autoIngestImpl(
   }
 
   // ── Step 4: Parse review items ────────────────────────────────
-  const reviewItems = [
-    ...parseReviewBlocks(generation, sp),
-    ...parseReviewBlocks(reviewSuggestionOutput, sp),
-  ]
+  const reviewItems = suppressReviews
+    ? []
+    : [
+        ...parseReviewBlocks(generation, sp),
+        ...parseReviewBlocks(reviewSuggestionOutput, sp),
+      ]
   if (reviewItems.length > 0) {
     useReviewStore.getState().addItems(reviewItems)
   }

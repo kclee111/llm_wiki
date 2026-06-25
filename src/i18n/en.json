@@ -226,6 +226,8 @@
   "review": {
     "title": "Review",
     "clearResolved": "Clear resolved",
+    "reviewExpansion": "Allow Review expansion",
+    "reviewExpansionHint": "When enabled, Deep Research follow-up ingest may create additional Review items.",
     "allClear": "All clear — nothing to review",
     "resolvedDivider": "— Resolved —"
   },
