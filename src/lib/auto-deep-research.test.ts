@@ -119,9 +119,43 @@ describe("runAutoDeepResearchForReviews", () => {
     expect(queueResearch).not.toHaveBeenCalled()
     expect(useReviewStore.getState().items[0].resolved).toBe(false)
   })
+
+  it("queues at most one review from a batch and marks the rest attempted", () => {
+    const attempted = new Set<string>()
+    const items = [
+      review({ id: "review-1", title: "Research alpha", searchQueries: ["alpha query"] }),
+      review({ id: "review-2", title: "Research beta", searchQueries: ["beta query"] }),
+    ]
+    useReviewStore.getState().setItems(items)
+    useResearchStore.getState().setAutoDeepResearchEnabled(true)
+
+    expect(runAutoDeepResearchForReviews(items, attempted)).toBe(1)
+    expect(runAutoDeepResearchForReviews(items, attempted)).toBe(0)
+
+    expect(queueResearch).toHaveBeenCalledTimes(1)
+    expect(queueResearch).toHaveBeenCalledWith(
+      "/project",
+      "alpha",
+      expect.any(Object),
+      expect.any(Object),
+      ["alpha query"],
+    )
+  })
 })
 
 describe("setupAutoDeepResearch", () => {
+  it("does not backfill existing review items when auto Deep Research is enabled", () => {
+    useReviewStore.getState().setItems([
+      review({ id: "old-1", title: "Research old", searchQueries: ["old query"] }),
+    ])
+    setupAutoDeepResearch()
+
+    useResearchStore.getState().setAutoDeepResearchEnabled(true)
+
+    expect(queueResearch).not.toHaveBeenCalled()
+    expect(useReviewStore.getState().items[0].resolved).toBe(false)
+  })
+
   it("queues new eligible review items when auto Deep Research is enabled", () => {
     setupAutoDeepResearch()
     useResearchStore.getState().setAutoDeepResearchEnabled(true)

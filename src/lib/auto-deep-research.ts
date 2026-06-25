@@ -7,6 +7,7 @@ import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { useWikiStore } from "@/stores/wiki-store"
 
 const AUTO_RESOLVED_ACTION = "Auto queued for deep research"
+const AUTO_DEEP_RESEARCH_BATCH_LIMIT = 1
 
 let unsubscribeReview: (() => void) | null = null
 let unsubscribeResearch: (() => void) | null = null
@@ -46,8 +47,11 @@ export function runAutoDeepResearchForReviews(
   if (!hasConfiguredDeepResearchSources(wikiStore.searchApiConfig)) return 0
 
   let queued = 0
-  for (const item of selectAutoDeepResearchCandidates(items, attemptedIds)) {
+  const candidates = selectAutoDeepResearchCandidates(items, attemptedIds)
+  for (const item of candidates) {
     attemptedIds.add(item.id)
+  }
+  for (const item of candidates.slice(0, AUTO_DEEP_RESEARCH_BATCH_LIMIT)) {
     queueResearch(
       normalizePath(wikiStore.project.path),
       topicForReview(item),
@@ -70,7 +74,9 @@ export function setupAutoDeepResearch(): void {
 
   unsubscribeResearch = useResearchStore.subscribe((state, prevState) => {
     if (!prevState.autoDeepResearchEnabled && state.autoDeepResearchEnabled) {
-      runAutoDeepResearchForReviews(useReviewStore.getState().items)
+      for (const item of useReviewStore.getState().items) {
+        attemptedReviewIds.add(item.id)
+      }
     }
   })
 
