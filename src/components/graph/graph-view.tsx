@@ -687,6 +687,8 @@ export function GraphView() {
   const graphSpacing = useWikiStore((s) => s.graphSpacing)
   const setGraphSpacing = useWikiStore((s) => s.setGraphSpacing)
   const resetGraphViewState = useWikiStore((s) => s.resetGraphViewState)
+  const reviewExpansionEnabled = useResearchStore((s) => s.reviewExpansionEnabled)
+  const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
   const isDarkMode = useResolvedDarkMode()
   const graphPalette = useMemo(() => graphThemePalette(isDarkMode), [isDarkMode])
   const labelRenderers = useMemo(() => makeLabelRenderers(graphPalette), [graphPalette])
@@ -1666,6 +1668,18 @@ export function GraphView() {
                     ))}
                   </div>
                 </div>
+                <label
+                  className="mb-4 flex items-center gap-1.5 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                  title={t("review.reviewExpansionHint")}
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={reviewExpansionEnabled}
+                    onChange={(event) => setReviewExpansionEnabled(event.currentTarget.checked)}
+                  />
+                  <span>{t("review.reviewExpansion")}</span>
+                </label>
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
