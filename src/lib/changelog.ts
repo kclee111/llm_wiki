@@ -26,6 +26,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.2",
+    date: "2026-06-25",
+    highlights: {
+      en: [
+        "Fixed knowledge graph node previews so clicked pages open in the graph-side preview panel instead of switching to the Wiki page.",
+        "Improved knowledge graph hover label contrast in light and dark mode.",
+      ],
+      zh: [
+        "修复知识图谱节点预览：点击页面节点时会在图谱右侧预览栏打开，不再跳转到 Wiki 页面。",
+        "改进知识图谱悬停标签在浅色和深色模式下的对比度。",
+      ],
+    },
+  },
+  {
     version: "0.5.1",
     date: "2026-06-24",
     highlights: {
