@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { WikiProject, FileNode } from "@/types/wiki"
 import { DEFAULT_SOURCE_WATCH_CONFIG } from "@/lib/source-watch-config"
+import { createDefaultGraphFilters, type GraphFilterState } from "@/lib/graph-filters"
 
 /**
  * Wire protocol used when `provider === "custom"`. Other providers have a
@@ -298,6 +299,9 @@ export interface ExternalPreview {
   snippet: string
 }
 
+export const DEFAULT_GRAPH_NODE_SCALE = 1
+export const DEFAULT_GRAPH_SPACING = 1
+
 interface WikiState {
   project: WikiProject | null
   fileTree: FileNode[]
@@ -337,6 +341,10 @@ interface WikiState {
   apiConfig: ApiConfig
   generalConfig: GeneralConfig
   dataVersion: number
+  graphFilters: GraphFilterState
+  graphNodeScale: number
+  graphSpacingDraft: number
+  graphSpacing: number
 
   setProject: (project: WikiProject | null) => void
   setFileTree: (tree: FileNode[]) => void
@@ -361,6 +369,11 @@ interface WikiState {
   setApiConfig: (config: ApiConfig) => void
   setGeneralConfig: (config: GeneralConfig) => void
   bumpDataVersion: () => void
+  setGraphFilters: (filters: GraphFilterState | ((prev: GraphFilterState) => GraphFilterState)) => void
+  setGraphNodeScale: (scale: number) => void
+  setGraphSpacingDraft: (spacing: number) => void
+  setGraphSpacing: (spacing: number) => void
+  resetGraphViewState: () => void
 }
 
 export const useWikiStore = create<WikiState>((set) => ({
@@ -372,6 +385,10 @@ export const useWikiStore = create<WikiState>((set) => ({
   externalPreview: null,
   pendingScrollImageSrc: null,
   activeView: "wiki",
+  graphFilters: createDefaultGraphFilters(),
+  graphNodeScale: DEFAULT_GRAPH_NODE_SCALE,
+  graphSpacingDraft: DEFAULT_GRAPH_SPACING,
+  graphSpacing: DEFAULT_GRAPH_SPACING,
   llmConfig: {
     provider: "openai",
     apiKey: "",
@@ -497,6 +514,19 @@ export const useWikiStore = create<WikiState>((set) => ({
   setApiConfig: (apiConfig) => set({ apiConfig }),
   setGeneralConfig: (generalConfig) => set({ generalConfig }),
   bumpDataVersion: () => set((state) => ({ dataVersion: state.dataVersion + 1 })),
+  setGraphFilters: (filters) =>
+    set((state) => ({
+      graphFilters: typeof filters === "function" ? filters(state.graphFilters) : filters,
+    })),
+  setGraphNodeScale: (graphNodeScale) => set({ graphNodeScale }),
+  setGraphSpacingDraft: (graphSpacingDraft) => set({ graphSpacingDraft }),
+  setGraphSpacing: (graphSpacing) => set({ graphSpacing }),
+  resetGraphViewState: () => set({
+    graphFilters: createDefaultGraphFilters(),
+    graphNodeScale: DEFAULT_GRAPH_NODE_SCALE,
+    graphSpacingDraft: DEFAULT_GRAPH_SPACING,
+    graphSpacing: DEFAULT_GRAPH_SPACING,
+  }),
 }))
 
 export type { WikiState, LlmConfig, SearchApiConfig, EmbeddingConfig, MultimodalConfig, OutputLanguage, ProxyConfig, ScheduledImportConfig, SourceWatchConfig, ApiConfig }

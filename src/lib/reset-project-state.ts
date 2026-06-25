@@ -12,6 +12,7 @@ import { useChatStore } from "@/stores/chat-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useActivityStore } from "@/stores/activity-store"
 import { useResearchStore } from "@/stores/research-store"
+import { useWikiStore } from "@/stores/wiki-store"
 
 export async function resetProjectState(): Promise<void> {
   // Zustand stores — clear all per-project data (synchronous)
@@ -40,6 +41,16 @@ export async function resetProjectState(): Promise<void> {
     tasks: [],
     panelOpen: false,
   })
+
+  useWikiStore.setState({
+    fileTree: [],
+    selectedFile: null,
+    fileContent: "",
+    previewContentPath: null,
+    externalPreview: null,
+    pendingScrollImageSrc: null,
+  })
+  useWikiStore.getState().resetGraphViewState()
 
   // Module-level caches — load in parallel and clear each, surfacing any
   // failure instead of swallowing it.

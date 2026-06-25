@@ -4,6 +4,7 @@ import { useChatStore } from "@/stores/chat-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useActivityStore } from "@/stores/activity-store"
 import { useResearchStore } from "@/stores/research-store"
+import { DEFAULT_GRAPH_NODE_SCALE, DEFAULT_GRAPH_SPACING, useWikiStore } from "@/stores/wiki-store"
 import { getQueue, pauseQueue } from "./ingest-queue"
 
 // Dynamic-import mocks: resetProjectState uses `import("@/lib/ingest-queue")`
@@ -114,6 +115,58 @@ describe("resetProjectState — Zustand stores", () => {
     await resetProjectState()
     expect(useResearchStore.getState().tasks).toEqual([])
     expect(useResearchStore.getState().panelOpen).toBe(false)
+  })
+
+  it("clears project file tree and preview state", async () => {
+    useWikiStore.setState({
+      fileTree: [
+        {
+          name: "old-project",
+          path: "/old/wiki",
+          is_dir: true,
+          children: [],
+        },
+      ],
+      selectedFile: "/old/wiki/page.md",
+      fileContent: "old content",
+      previewContentPath: "/old/wiki/page.md",
+      externalPreview: {
+        title: "Old report",
+        path: "/old/raw/report.pdf",
+        source: "raw",
+        url: "file:///old/raw/report.pdf",
+        snippet: "old",
+      },
+      pendingScrollImageSrc: "media/old.png",
+      graphFilters: {
+        hideStructural: false,
+        hideIsolated: true,
+        maxLinks: 2,
+        hiddenTypes: new Set(["source"]),
+        hiddenNodeIds: new Set(["old-node"]),
+      },
+      graphNodeScale: 1.4,
+      graphSpacingDraft: 1.8,
+      graphSpacing: 1.8,
+    })
+
+    await resetProjectState()
+
+    const wiki = useWikiStore.getState()
+    expect(wiki.fileTree).toEqual([])
+    expect(wiki.selectedFile).toBeNull()
+    expect(wiki.fileContent).toBe("")
+    expect(wiki.previewContentPath).toBeNull()
+    expect(wiki.externalPreview).toBeNull()
+    expect(wiki.pendingScrollImageSrc).toBeNull()
+    expect(wiki.graphFilters.hideStructural).toBe(true)
+    expect(wiki.graphFilters.hideIsolated).toBe(false)
+    expect(wiki.graphFilters.maxLinks).toBeUndefined()
+    expect([...wiki.graphFilters.hiddenTypes]).toEqual([])
+    expect([...wiki.graphFilters.hiddenNodeIds]).toEqual([])
+    expect(wiki.graphNodeScale).toBe(DEFAULT_GRAPH_NODE_SCALE)
+    expect(wiki.graphSpacingDraft).toBe(DEFAULT_GRAPH_SPACING)
+    expect(wiki.graphSpacing).toBe(DEFAULT_GRAPH_SPACING)
   })
 })
 

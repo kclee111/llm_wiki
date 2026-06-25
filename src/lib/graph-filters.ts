@@ -23,6 +23,14 @@ export const DEFAULT_GRAPH_FILTERS: GraphFilterState = {
   maxLinks: undefined,
 }
 
+export function createDefaultGraphFilters(): GraphFilterState {
+  return {
+    ...DEFAULT_GRAPH_FILTERS,
+    hiddenTypes: new Set(),
+    hiddenNodeIds: new Set(),
+  }
+}
+
 const STRUCTURAL_IDS = new Set(["index", "overview", "log", "schema", "purpose"])
 
 export function isStructuralGraphNode(node: Pick<GraphNode, "id" | "path" | "type">): boolean {

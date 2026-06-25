@@ -16,7 +16,7 @@ import { findSurprisingConnections, detectKnowledgeGaps, type SurprisingConnecti
 import { queueResearch } from "@/lib/deep-research"
 import { optimizeResearchTopic } from "@/lib/optimize-research-topic"
 import { normalizePath } from "@/lib/path-utils"
-import { applyGraphFilters, DEFAULT_GRAPH_FILTERS, hasActiveGraphFilters, type GraphFilterState } from "@/lib/graph-filters"
+import { applyGraphFilters, hasActiveGraphFilters } from "@/lib/graph-filters"
 import { applyGraphSearch } from "@/lib/graph-search"
 import { wikiTypeLabel } from "@/lib/wiki-page-types"
 import { useTranslation } from "react-i18next"
@@ -120,8 +120,6 @@ type GraphThemePalette = {
 
 const BASE_NODE_SIZE = 8
 const MAX_NODE_SIZE = 28
-const DEFAULT_NODE_SCALE = 1
-const DEFAULT_GRAPH_SPACING = 1
 const GRAPH_SPACING_DEBOUNCE_MS = 180
 const WORKER_LAYOUT_NODE_THRESHOLD = 220
 
@@ -680,6 +678,15 @@ export function GraphView() {
   const project = useWikiStore((s) => s.project)
   const dataVersion = useWikiStore((s) => s.dataVersion)
   const openFileInPreview = useWikiStore((s) => s.openFileInPreview)
+  const filters = useWikiStore((s) => s.graphFilters)
+  const setFilters = useWikiStore((s) => s.setGraphFilters)
+  const nodeScale = useWikiStore((s) => s.graphNodeScale)
+  const setNodeScale = useWikiStore((s) => s.setGraphNodeScale)
+  const graphSpacingDraft = useWikiStore((s) => s.graphSpacingDraft)
+  const setGraphSpacingDraft = useWikiStore((s) => s.setGraphSpacingDraft)
+  const graphSpacing = useWikiStore((s) => s.graphSpacing)
+  const setGraphSpacing = useWikiStore((s) => s.setGraphSpacing)
+  const resetGraphViewState = useWikiStore((s) => s.resetGraphViewState)
   const isDarkMode = useResolvedDarkMode()
   const graphPalette = useMemo(() => graphThemePalette(isDarkMode), [isDarkMode])
   const labelRenderers = useMemo(() => makeLabelRenderers(graphPalette), [graphPalette])
@@ -703,14 +710,6 @@ export function GraphView() {
   const [showFilters, setShowFilters] = useState(false)
   const [graphSearchOpen, setGraphSearchOpen] = useState(false)
   const [graphSearch, setGraphSearch] = useState("")
-  const [nodeScale, setNodeScale] = useState(DEFAULT_NODE_SCALE)
-  const [graphSpacingDraft, setGraphSpacingDraft] = useState(DEFAULT_GRAPH_SPACING)
-  const [graphSpacing, setGraphSpacing] = useState(DEFAULT_GRAPH_SPACING)
-  const [filters, setFilters] = useState<GraphFilterState>(() => ({
-    ...DEFAULT_GRAPH_FILTERS,
-    hiddenTypes: new Set(),
-    hiddenNodeIds: new Set(),
-  }))
   const [nodeMenu, setNodeMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null)
   const graphContainerRef = useRef<HTMLDivElement>(null)
   const researchDialogTokenRef = useRef(0)
@@ -811,16 +810,9 @@ export function GraphView() {
   }, [])
 
   const resetFilters = useCallback(() => {
-    setFilters({
-      ...DEFAULT_GRAPH_FILTERS,
-      hiddenTypes: new Set(),
-      hiddenNodeIds: new Set(),
-    })
-    setNodeScale(DEFAULT_NODE_SCALE)
-    setGraphSpacingDraft(DEFAULT_GRAPH_SPACING)
-    setGraphSpacing(DEFAULT_GRAPH_SPACING)
+    resetGraphViewState()
     setNodeMenu(null)
-  }, [])
+  }, [resetGraphViewState])
 
   const knowledgeGapKey = useCallback((gap: KnowledgeGap) => (
     `gap:${gap.type}:${gap.title}:${gap.nodeIds.join(",")}`
