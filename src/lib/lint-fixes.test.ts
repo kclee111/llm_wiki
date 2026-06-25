@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const fsMocks = vi.hoisted(() => ({
   createDirectory: vi.fn(),
   fileExists: vi.fn(),
+  readFile: vi.fn(),
   writeFile: vi.fn(),
 }))
 
@@ -10,7 +11,10 @@ vi.mock("@/commands/fs", () => fsMocks)
 
 import {
   appendWikilink,
+  applySuggestedLinkFixes,
+  applySuggestedLinkFix,
   ensureBrokenLinkStub,
+  isSuggestedLinkFixable,
   rewriteWikilinkTarget,
   stubRelativePathFromBrokenTarget,
 } from "./lint-fixes"
@@ -18,6 +22,7 @@ import {
 beforeEach(() => {
   fsMocks.createDirectory.mockReset()
   fsMocks.fileExists.mockReset()
+  fsMocks.readFile.mockReset()
   fsMocks.writeFile.mockReset()
 })
 
@@ -90,5 +95,134 @@ describe("ensureBrokenLinkStub", () => {
 
   it("keeps explicit wiki subdirectories when building stub paths", () => {
     expect(stubRelativePathFromBrokenTarget("concepts/Foo Bar")).toBe("concepts/foo-bar.md")
+  })
+})
+
+describe("isSuggestedLinkFixable", () => {
+  it("only marks structural lint items with concrete suggested link targets as auto-fixable", () => {
+    expect(isSuggestedLinkFixable({
+      type: "orphan",
+      severity: "info",
+      page: "concepts/iso-50001.md",
+      detail: "No inbound links.",
+      suggestedSource: "concepts/ems.md",
+    })).toBe(true)
+
+    expect(isSuggestedLinkFixable({
+      type: "semantic",
+      severity: "warning",
+      page: "concepts/ems.md",
+      detail: "Needs review.",
+    })).toBe(false)
+  })
+})
+
+describe("applySuggestedLinkFix", () => {
+  it("adds an inbound link from the suggested source to an orphan page", async () => {
+    fsMocks.readFile.mockResolvedValue("# EMS\n")
+
+    await expect(applySuggestedLinkFix("/project", {
+      type: "orphan",
+      severity: "info",
+      page: "concepts/iso-50001.md",
+      detail: "No inbound links.",
+      suggestedSource: "concepts/ems.md",
+    })).resolves.toBe(true)
+
+    expect(fsMocks.readFile).toHaveBeenCalledWith("/project/wiki/concepts/ems.md")
+    expect(fsMocks.writeFile).toHaveBeenCalledWith(
+      "/project/wiki/concepts/ems.md",
+      "# EMS\n\n## Related\n- [[concepts/iso-50001]]\n",
+    )
+  })
+
+  it("rewrites a broken wikilink to the suggested target", async () => {
+    fsMocks.readFile.mockResolvedValue("See [[iso50001|ISO 50001]].")
+
+    await expect(applySuggestedLinkFix("/project", {
+      type: "broken-link",
+      severity: "warning",
+      page: "concepts/ems.md",
+      detail: "Broken link.",
+      brokenTarget: "iso50001",
+      suggestedTarget: "concepts/iso-50001.md",
+    })).resolves.toBe(true)
+
+    expect(fsMocks.writeFile).toHaveBeenCalledWith(
+      "/project/wiki/concepts/ems.md",
+      "See [[concepts/iso-50001|ISO 50001]].",
+    )
+  })
+
+  it("adds the suggested outbound link for a no-outlinks page", async () => {
+    fsMocks.readFile.mockResolvedValue("# EMS\n")
+
+    await expect(applySuggestedLinkFix("/project", {
+      type: "no-outlinks",
+      severity: "info",
+      page: "concepts/ems.md",
+      detail: "No outlinks.",
+      suggestedTarget: "concepts/iso-50001.md",
+    })).resolves.toBe(true)
+
+    expect(fsMocks.writeFile).toHaveBeenCalledWith(
+      "/project/wiki/concepts/ems.md",
+      "# EMS\n\n## Related\n- [[concepts/iso-50001]]\n",
+    )
+  })
+})
+
+describe("applySuggestedLinkFixes", () => {
+  it("applies all suggested link fixes and returns only unresolved lint items", async () => {
+    fsMocks.readFile
+      .mockResolvedValueOnce("# EMS\n")
+      .mockResolvedValueOnce("# ISO\n")
+
+    const unresolved = {
+      type: "broken-link" as const,
+      severity: "warning" as const,
+      page: "concepts/ems.md",
+      detail: "Broken link without suggestion.",
+      brokenTarget: "missing",
+    }
+
+    const result = await applySuggestedLinkFixes("/project", [
+      {
+        type: "orphan",
+        severity: "info",
+        page: "concepts/iso-50001.md",
+        detail: "No inbound links.",
+        suggestedSource: "concepts/ems.md",
+      },
+      {
+        type: "no-outlinks",
+        severity: "info",
+        page: "concepts/iso-50001.md",
+        detail: "No outbound links.",
+        suggestedTarget: "concepts/ems.md",
+      },
+      unresolved,
+    ])
+
+    expect(result.fixed).toBe(2)
+    expect(result.remaining).toEqual([unresolved])
+    expect(result.errors).toEqual([])
+  })
+
+  it("keeps an item when its suggested link fix fails", async () => {
+    const item = {
+      type: "orphan" as const,
+      severity: "info" as const,
+      page: "concepts/iso-50001.md",
+      detail: "No inbound links.",
+      suggestedSource: "concepts/ems.md",
+    }
+    fsMocks.readFile.mockRejectedValue(new Error("read failed"))
+
+    const result = await applySuggestedLinkFixes("/project", [item])
+
+    expect(result.fixed).toBe(0)
+    expect(result.remaining).toEqual([item])
+    expect(result.errors).toEqual(["concepts/iso-50001.md: read failed"])
   })
 })

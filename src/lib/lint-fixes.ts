@@ -1,6 +1,7 @@
-import { createDirectory, fileExists, writeFile } from "@/commands/fs"
+import { createDirectory, fileExists, readFile, writeFile } from "@/commands/fs"
 import { getFileName, normalizePath } from "@/lib/path-utils"
 import { makeQuerySlug } from "@/lib/wiki-filename"
+import type { LintResult } from "@/lib/lint"
 
 export function lintLinkTarget(target: string): string {
   return normalizePath(target)
@@ -45,6 +46,70 @@ export function rewriteWikilinkTarget(
       return `[[${replacement}${rawAlias ?? ""}]]`
     },
   )
+}
+
+export function isSuggestedLinkFixable(item: LintResult): boolean {
+  if (item.type === "orphan") return Boolean(item.suggestedSource)
+  if (item.type === "broken-link") return Boolean(item.brokenTarget && item.suggestedTarget)
+  if (item.type === "no-outlinks") return Boolean(item.suggestedTarget)
+  return false
+}
+
+export async function applySuggestedLinkFix(projectPath: string, item: LintResult): Promise<boolean> {
+  const pp = normalizePath(projectPath)
+  if (item.type === "orphan" && item.suggestedSource) {
+    const sourcePath = `${pp}/wiki/${item.suggestedSource}`
+    const content = await readFile(sourcePath)
+    await writeFile(sourcePath, appendWikilink(content, item.page))
+    return true
+  }
+
+  if (item.type === "broken-link" && item.brokenTarget && item.suggestedTarget) {
+    const pagePath = `${pp}/wiki/${item.page}`
+    const content = await readFile(pagePath)
+    await writeFile(pagePath, rewriteWikilinkTarget(content, item.brokenTarget, item.suggestedTarget))
+    return true
+  }
+
+  if (item.type === "no-outlinks" && item.suggestedTarget) {
+    const pagePath = `${pp}/wiki/${item.page}`
+    const content = await readFile(pagePath)
+    await writeFile(pagePath, appendWikilink(content, item.suggestedTarget))
+    return true
+  }
+
+  return false
+}
+
+export async function applySuggestedLinkFixes(
+  projectPath: string,
+  items: readonly LintResult[],
+): Promise<{ fixed: number; remaining: LintResult[]; errors: string[] }> {
+  const remaining: LintResult[] = []
+  const errors: string[] = []
+  let fixed = 0
+
+  for (const item of items) {
+    if (!isSuggestedLinkFixable(item)) {
+      remaining.push(item)
+      continue
+    }
+
+    try {
+      const applied = await applySuggestedLinkFix(projectPath, item)
+      if (applied) {
+        fixed += 1
+      } else {
+        remaining.push(item)
+      }
+    } catch (err) {
+      remaining.push(item)
+      const message = err instanceof Error ? err.message : String(err)
+      errors.push(`${item.page}: ${message}`)
+    }
+  }
+
+  return { fixed, remaining, errors }
 }
 
 export function stubRelativePathFromBrokenTarget(brokenTarget: string): string {

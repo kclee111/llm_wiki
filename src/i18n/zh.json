@@ -195,6 +195,8 @@
     "semantic": "语义检查 (LLM)",
     "running": "检查中...",
     "runLint": "开始检查",
+    "autoFixSuggestedLinks": "自动修复建议链接",
+    "autoFixSuggestedLinksHint": "检查完成后，自动应用结构性建议来源/目标链接，并保留未解决项。",
     "runLintHint": "运行检查以诊断 Wiki 健康状况",
     "runLintDescription": "检查孤立页面、失效链接等问题",
     "allClear": "一切正常！",

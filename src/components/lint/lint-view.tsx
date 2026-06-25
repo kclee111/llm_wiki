@@ -22,6 +22,7 @@ import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 import {
   appendWikilink,
+  applySuggestedLinkFixes,
   ensureBrokenLinkStub,
   rewriteWikilinkTarget,
 } from "@/lib/lint-fixes"
@@ -72,6 +73,7 @@ export function LintView() {
   const [running, setRunning] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [runSemantic, setRunSemantic] = useState(false)
+  const [autoFixSuggestedLinks, setAutoFixSuggestedLinks] = useState(false)
   const [fixingId, setFixingId] = useState<string | null>(null)
   const [fixError, setFixError] = useState<string | null>(null)
 
@@ -90,6 +92,19 @@ export function LintView() {
         all = [...structural, ...semantic]
       }
 
+      if (autoFixSuggestedLinks) {
+        const fixed = await applySuggestedLinkFixes(pp, all)
+        all = fixed.remaining
+        if (fixed.errors.length > 0) {
+          setFixError(fixed.errors.join("\n"))
+        }
+        if (fixed.fixed > 0) {
+          const tree = await listDirectory(pp)
+          setFileTree(tree)
+          bumpDataVersion()
+        }
+      }
+
       addLintItems(all)
       setHasRun(true)
     } catch (err) {
@@ -97,7 +112,7 @@ export function LintView() {
     } finally {
       setRunning(false)
     }
-  }, [project, llmConfig, running, runSemantic, addLintItems, clearLintItems])
+  }, [project, llmConfig, running, runSemantic, autoFixSuggestedLinks, addLintItems, clearLintItems, setFileTree, bumpDataVersion])
 
   async function handleOpenPage(page: string) {
     if (!project) return
@@ -268,6 +283,18 @@ export function LintView() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <label
+            className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer"
+            title={t("lint.autoFixSuggestedLinksHint")}
+          >
+            <input
+              type="checkbox"
+              className="h-3 w-3"
+              checked={autoFixSuggestedLinks}
+              onChange={(e) => setAutoFixSuggestedLinks(e.target.checked)}
+            />
+            {t("lint.autoFixSuggestedLinks")}
+          </label>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
