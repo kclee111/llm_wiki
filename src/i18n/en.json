@@ -44,6 +44,12 @@
     "webSource": "Web source",
     "open": "Open",
     "remove": "Remove",
+    "trigger": {
+      "autoReview": "Auto",
+      "manualReview": "Review",
+      "graphInsight": "Graph",
+      "researchPanel": "Panel"
+    },
     "status": {
       "queued": "Queued",
       "searching": "Searching sources...",
@@ -232,6 +238,12 @@
     "clearResolved": "Clear resolved",
     "reviewExpansion": "Allow Review expansion",
     "reviewExpansionHint": "When enabled, Deep Research follow-up ingest may create additional Review items.",
+    "autoResearch": {
+      "queued": "Auto Deep Research queued",
+      "running": "Auto Deep Research running",
+      "saving": "Auto Deep Research saving",
+      "failed": "Auto Deep Research failed"
+    },
     "allClear": "All clear — nothing to review",
     "resolvedDivider": "— Resolved —"
   },

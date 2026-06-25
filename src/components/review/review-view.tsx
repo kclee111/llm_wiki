@@ -10,6 +10,8 @@ import {
   X,
   Check,
   Trash2,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
@@ -21,6 +23,7 @@ import { hasConfiguredDeepResearchSources } from "@/lib/web-search"
 import { makeQueryFileName } from "@/lib/wiki-filename"
 import { createReviewPageDrafts } from "@/lib/review-create-page"
 import { cleanAssistantContentForWikiSave, titleFromCleanAssistantContent } from "@/lib/chat-save-to-wiki"
+import { getReviewAutoResearchStatus, type ReviewAutoResearchStatus } from "@/lib/review-research-status"
 import { useTranslation } from "react-i18next"
 
 const typeConfig: Record<ReviewItem["type"], { icon: typeof AlertTriangle; label: string; color: string }> = {
@@ -41,6 +44,7 @@ export function ReviewView() {
   const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
   const autoDeepResearchEnabled = useResearchStore((s) => s.autoDeepResearchEnabled)
   const setAutoDeepResearchEnabled = useResearchStore((s) => s.setAutoDeepResearchEnabled)
+  const researchTasks = useResearchStore((s) => s.tasks)
   const project = useWikiStore((s) => s.project)
   const setFileTree = useWikiStore((s) => s.setFileTree)
 
@@ -313,6 +317,7 @@ export function ReviewView() {
               <ReviewCard
                 key={item.id}
                 item={item}
+                autoResearchStatus={getReviewAutoResearchStatus(researchTasks, item.id)}
                 onResolve={handleResolve}
                 onDismiss={dismissItem}
               />
@@ -326,6 +331,7 @@ export function ReviewView() {
               <ReviewCard
                 key={item.id}
                 item={item}
+                autoResearchStatus={null}
                 onResolve={handleResolve}
                 onDismiss={dismissItem}
               />
@@ -339,10 +345,12 @@ export function ReviewView() {
 
 function ReviewCard({
   item,
+  autoResearchStatus,
   onResolve,
   onDismiss,
 }: {
   item: ReviewItem
+  autoResearchStatus: ReviewAutoResearchStatus | null
   onResolve: (id: string, action: string) => void
   onDismiss: (id: string) => void
 }) {
@@ -379,7 +387,25 @@ function ReviewCard({
 
       {!item.resolved ? (
         <div className="flex flex-wrap gap-1.5">
-          {(item.type === "suggestion" || item.type === "missing-page") && (
+          {autoResearchStatus && (
+            <div
+              className={`flex min-h-7 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs ${
+                autoResearchStatus.state === "failed"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-primary/30 bg-primary/10 text-primary"
+              }`}
+            >
+              {autoResearchStatus.state === "failed" ? (
+                <AlertCircle className="h-3.5 w-3.5" />
+              ) : (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              )}
+              <span>
+                {t(`review.autoResearch.${autoResearchStatus.state}`)}
+              </span>
+            </div>
+          )}
+          {(item.type === "suggestion" || item.type === "missing-page") && (!autoResearchStatus || autoResearchStatus.state === "failed") && (
             <Button
               variant="default"
               size="sm"

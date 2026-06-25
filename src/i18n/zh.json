@@ -44,6 +44,12 @@
     "webSource": "网页来源",
     "open": "打开",
     "remove": "移除",
+    "trigger": {
+      "autoReview": "自动",
+      "manualReview": "审阅",
+      "graphInsight": "图谱",
+      "researchPanel": "面板"
+    },
     "status": {
       "queued": "排队中",
       "searching": "正在搜索来源...",
@@ -232,6 +238,12 @@
     "clearResolved": "清除已解决",
     "reviewExpansion": "允许扩展待审阅项",
     "reviewExpansionHint": "启用后，Deep Research 的后续提取可以继续生成新的待审阅项。",
+    "autoResearch": {
+      "queued": "自动 Deep Research 已排队",
+      "running": "自动 Deep Research 运行中",
+      "saving": "自动 Deep Research 正在保存",
+      "failed": "自动 Deep Research 失败"
+    },
     "allClear": "一切正常，无需审阅",
     "resolvedDivider": "— 已解决 —"
   },

@@ -286,6 +286,13 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
     failed: t("research.followUpIngest.failed"),
   }[task.followUpIngest.status] : null
 
+  const triggerBadge = task.triggerMetadata?.trigger ? {
+    "auto-review": t("research.trigger.autoReview"),
+    "manual-review": t("research.trigger.manualReview"),
+    "graph-insight": t("research.trigger.graphInsight"),
+    "research-panel": t("research.trigger.researchPanel"),
+  }[task.triggerMetadata.trigger] : null
+
   async function handleOpenSaved() {
     if (!project || !task.savedPath) return
     const path = `${normalizePath(project.path)}/${task.savedPath}`
@@ -310,6 +317,11 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
         {statusIcon}
+        {triggerBadge && (
+          <span className="shrink-0 rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            {triggerBadge}
+          </span>
+        )}
         <span className="flex-1 truncate font-medium">{task.topic}</span>
         <span className="shrink-0 text-muted-foreground">{statusText}</span>
       </button>
