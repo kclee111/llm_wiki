@@ -35,6 +35,8 @@
     "notConfigured": "Deep Research sources are not configured. Go to Settings → External Information Sources to configure Web Search or AnyTXT.",
     "activeBadge": "{{running}} active{{queued, plural, =0 {} other {, {{queued}} queued}}}",
     "inputPlaceholder": "Enter a research topic...",
+    "autoDeepResearch": "Auto Deep Research",
+    "autoDeepResearchHint": "Automatically queue eligible Review items for Deep Research when they include search queries.",
     "emptyTitle": "No research tasks yet",
     "emptyHint": "Enter a topic above or click Deep Research in Review",
     "sourcesCount": "Sources ({{count}})",

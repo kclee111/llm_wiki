@@ -24,6 +24,7 @@ interface ResearchState {
   panelOpen: boolean
   maxConcurrent: number
   reviewExpansionEnabled: boolean
+  autoDeepResearchEnabled: boolean
 
   addTask: (topic: string) => string
   updateTask: (id: string, updates: Partial<ResearchTask>) => void
@@ -31,6 +32,7 @@ interface ResearchState {
   removeTask: (id: string) => void
   setPanelOpen: (open: boolean) => void
   setReviewExpansionEnabled: (enabled: boolean) => void
+  setAutoDeepResearchEnabled: (enabled: boolean) => void
   getRunningCount: () => number
   getNextQueued: () => ResearchTask | undefined
 }
@@ -42,6 +44,7 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   panelOpen: false,
   maxConcurrent: 3,
   reviewExpansionEnabled: false,
+  autoDeepResearchEnabled: false,
 
   addTask: (topic) => {
     const id = `research-${++counter}`
@@ -88,6 +91,8 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   setPanelOpen: (panelOpen) => set({ panelOpen }),
 
   setReviewExpansionEnabled: (reviewExpansionEnabled) => set({ reviewExpansionEnabled }),
+
+  setAutoDeepResearchEnabled: (autoDeepResearchEnabled) => set({ autoDeepResearchEnabled }),
 
   getRunningCount: () => {
     const { tasks } = get()

@@ -39,6 +39,8 @@ export function ReviewView() {
   const clearResolved = useReviewStore((s) => s.clearResolved)
   const reviewExpansionEnabled = useResearchStore((s) => s.reviewExpansionEnabled)
   const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
+  const autoDeepResearchEnabled = useResearchStore((s) => s.autoDeepResearchEnabled)
+  const setAutoDeepResearchEnabled = useResearchStore((s) => s.setAutoDeepResearchEnabled)
   const project = useWikiStore((s) => s.project)
   const setFileTree = useWikiStore((s) => s.setFileTree)
 
@@ -256,6 +258,18 @@ export function ReviewView() {
           )}
         </h2>
         <div className="flex items-center gap-3">
+          <label
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            title={t("research.autoDeepResearchHint")}
+          >
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-primary"
+              checked={autoDeepResearchEnabled}
+              onChange={(event) => setAutoDeepResearchEnabled(event.currentTarget.checked)}
+            />
+            <span>{t("research.autoDeepResearch")}</span>
+          </label>
           <label
             className="flex items-center gap-1.5 text-xs text-muted-foreground"
             title={t("review.reviewExpansionHint")}

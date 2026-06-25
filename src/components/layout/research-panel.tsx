@@ -28,6 +28,8 @@ export function ResearchPanel() {
   const setPanelOpen = useResearchStore((s) => s.setPanelOpen)
   const reviewExpansionEnabled = useResearchStore((s) => s.reviewExpansionEnabled)
   const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
+  const autoDeepResearchEnabled = useResearchStore((s) => s.autoDeepResearchEnabled)
+  const setAutoDeepResearchEnabled = useResearchStore((s) => s.setAutoDeepResearchEnabled)
   const project = useWikiStore((s) => s.project)
   const llmConfig = useWikiStore((s) => s.llmConfig)
   const searchApiConfig = useWikiStore((s) => s.searchApiConfig)
@@ -88,18 +90,32 @@ export function ResearchPanel() {
           <Send className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <label
-        className="flex shrink-0 items-center gap-1.5 border-b px-3 py-1.5 text-[11px] text-muted-foreground"
-        title={t("review.reviewExpansionHint")}
-      >
-        <input
-          type="checkbox"
-          className="h-3.5 w-3.5 accent-primary"
-          checked={reviewExpansionEnabled}
-          onChange={(event) => setReviewExpansionEnabled(event.currentTarget.checked)}
-        />
-        <span>{t("review.reviewExpansion")}</span>
-      </label>
+      <div className="flex shrink-0 flex-col gap-1 border-b px-3 py-1.5">
+        <label
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+          title={t("research.autoDeepResearchHint")}
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-primary"
+            checked={autoDeepResearchEnabled}
+            onChange={(event) => setAutoDeepResearchEnabled(event.currentTarget.checked)}
+          />
+          <span>{t("research.autoDeepResearch")}</span>
+        </label>
+        <label
+          className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+          title={t("review.reviewExpansionHint")}
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-primary"
+            checked={reviewExpansionEnabled}
+            onChange={(event) => setReviewExpansionEnabled(event.currentTarget.checked)}
+          />
+          <span>{t("review.reviewExpansion")}</span>
+        </label>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {tasks.length === 0 ? (

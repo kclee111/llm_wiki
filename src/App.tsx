@@ -12,6 +12,7 @@ import { listDirectory, openProject } from "@/commands/fs"
 import { getLastProject, getRecentProjects, saveLastProject, loadLlmConfig, loadLanguage, loadSearchApiConfig, loadEmbeddingConfig, loadMineruConfig, loadMultimodalConfig, loadOutputLanguage, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadApiConfig, loadGeneralConfig, loadZoomLevel } from "@/lib/project-store"
 import { loadReviewItems, loadLintItems, loadChatHistory, loadChatPreferences } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
+import { setupAutoDeepResearch } from "@/lib/auto-deep-research"
 import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
@@ -35,6 +36,7 @@ function App() {
   // Set up auto-save and clip watcher once on mount
   useEffect(() => {
     setupAutoSave()
+    setupAutoDeepResearch()
     startClipWatcher()
   }, [])
 
