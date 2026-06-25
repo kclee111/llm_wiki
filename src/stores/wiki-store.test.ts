@@ -51,4 +51,38 @@ describe("wiki preview store actions", () => {
     expect(state.previewContentPath).toBe("/project/wiki/page.md")
     expect(state.externalPreview).toBeNull()
   })
+
+  it("tracks preview back and forward history when opening wiki files", () => {
+    useWikiStore.setState({
+      activeView: "wiki",
+      selectedFile: "/project/wiki/first.md",
+      fileContent: "# First",
+      previewContentPath: "/project/wiki/first.md",
+      externalPreview: null,
+      previewBackStack: [],
+      previewForwardStack: [],
+    })
+
+    useWikiStore.getState().openPathInPreview("/project/wiki/second.md")
+
+    expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/second.md")
+    expect(useWikiStore.getState().previewBackStack).toEqual(["/project/wiki/first.md"])
+    expect(useWikiStore.getState().previewForwardStack).toEqual([])
+    expect(useWikiStore.getState().canGoBackInPreview()).toBe(true)
+    expect(useWikiStore.getState().canGoForwardInPreview()).toBe(false)
+
+    useWikiStore.getState().goBackInPreview()
+
+    expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/first.md")
+    expect(useWikiStore.getState().previewBackStack).toEqual([])
+    expect(useWikiStore.getState().previewForwardStack).toEqual(["/project/wiki/second.md"])
+    expect(useWikiStore.getState().canGoBackInPreview()).toBe(false)
+    expect(useWikiStore.getState().canGoForwardInPreview()).toBe(true)
+
+    useWikiStore.getState().goForwardInPreview()
+
+    expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/second.md")
+    expect(useWikiStore.getState().previewBackStack).toEqual(["/project/wiki/first.md"])
+    expect(useWikiStore.getState().previewForwardStack).toEqual([])
+  })
 })

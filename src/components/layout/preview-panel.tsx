@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from "react"
-import { X } from "lucide-react"
+import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile } from "@/commands/fs"
 import { getFileCategory, isBinary, isExtractedTextPreviewFile } from "@/lib/file-types"
@@ -7,6 +7,7 @@ import { WikiEditor } from "@/components/editor/wiki-editor"
 import { FilePreview } from "@/components/editor/file-preview"
 import { getFileName } from "@/lib/path-utils"
 import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function PreviewPanel() {
   const selectedFile = useWikiStore((s) => s.selectedFile)
@@ -16,6 +17,10 @@ export function PreviewPanel() {
   const project = useWikiStore((s) => s.project)
   const setFileContent = useWikiStore((s) => s.setFileContent)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const canGoBack = useWikiStore((s) => s.canGoBackInPreview())
+  const canGoForward = useWikiStore((s) => s.canGoForwardInPreview())
+  const goBackInPreview = useWikiStore((s) => s.goBackInPreview)
+  const goForwardInPreview = useWikiStore((s) => s.goForwardInPreview)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Snapshot of what was most recently loaded from disk. Milkdown re-emits
   // `markdownUpdated` on initial parse (before the user types anything),
@@ -112,12 +117,39 @@ export function PreviewPanel() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-3 py-1.5">
-        <span className="truncate text-xs text-muted-foreground" title={selectedFile}>
-          {fileName}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <TooltipProvider delay={300}>
+            <Tooltip>
+              <TooltipTrigger
+                aria-label="Back"
+                disabled={!canGoBack}
+                onClick={goBackInPreview}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-35"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Back</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                aria-label="Forward"
+                disabled={!canGoForward}
+                onClick={goForwardInPreview}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-35"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Forward</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <span className="truncate text-xs text-muted-foreground" title={selectedFile}>
+            {fileName}
+          </span>
+        </div>
         <button
           onClick={() => setSelectedFile(null)}
           className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
+          aria-label="Close preview"
         >
           <X className="h-3.5 w-3.5" />
         </button>

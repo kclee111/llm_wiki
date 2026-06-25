@@ -301,6 +301,7 @@ export interface ExternalPreview {
 
 export const DEFAULT_GRAPH_NODE_SCALE = 1
 export const DEFAULT_GRAPH_SPACING = 1
+const MAX_PREVIEW_HISTORY = 50
 
 interface WikiState {
   project: WikiProject | null
@@ -308,6 +309,8 @@ interface WikiState {
   selectedFile: string | null
   fileContent: string
   previewContentPath: string | null
+  previewBackStack: string[]
+  previewForwardStack: string[]
   externalPreview: ExternalPreview | null
   /**
    * One-shot scroll target for the markdown preview. When the user
@@ -352,6 +355,10 @@ interface WikiState {
   setFileContent: (content: string) => void
   openPathInPreview: (path: string) => void
   openFileInPreview: (path: string, content: string) => void
+  canGoBackInPreview: () => boolean
+  canGoForwardInPreview: () => boolean
+  goBackInPreview: () => void
+  goForwardInPreview: () => void
   setExternalPreview: (preview: ExternalPreview | null) => void
   setPendingScrollImageSrc: (src: string | null) => void
   setActiveView: (view: WikiState["activeView"]) => void
@@ -376,12 +383,21 @@ interface WikiState {
   resetGraphViewState: () => void
 }
 
-export const useWikiStore = create<WikiState>((set) => ({
+function pushPreviewHistory(state: WikiState, nextPath: string): string[] {
+  if (!state.selectedFile || state.selectedFile === nextPath || state.externalPreview) {
+    return state.previewBackStack
+  }
+  return [...state.previewBackStack, state.selectedFile].slice(-MAX_PREVIEW_HISTORY)
+}
+
+export const useWikiStore = create<WikiState>((set, get) => ({
   project: null,
   fileTree: [],
   selectedFile: null,
   fileContent: "",
   previewContentPath: null,
+  previewBackStack: [],
+  previewForwardStack: [],
   externalPreview: null,
   pendingScrollImageSrc: null,
   activeView: "wiki",
@@ -408,17 +424,66 @@ export const useWikiStore = create<WikiState>((set) => ({
   setProject: (project) => set({ project }),
   setFileTree: (fileTree) => set({ fileTree }),
   setSelectedFile: (selectedFile) =>
-    set({ selectedFile, previewContentPath: null, externalPreview: null }),
+    set({
+      selectedFile,
+      previewContentPath: null,
+      previewBackStack: selectedFile ? get().previewBackStack : [],
+      previewForwardStack: selectedFile ? get().previewForwardStack : [],
+      externalPreview: null,
+    }),
   setFileContent: (fileContent) => set({ fileContent }),
   openPathInPreview: (selectedFile) =>
-    set({ selectedFile, previewContentPath: null, externalPreview: null, activeView: "wiki" }),
+    set((state) => ({
+      selectedFile,
+      previewContentPath: null,
+      previewBackStack: pushPreviewHistory(state, selectedFile),
+      previewForwardStack: state.selectedFile === selectedFile ? state.previewForwardStack : [],
+      externalPreview: null,
+      activeView: "wiki",
+    })),
   openFileInPreview: (selectedFile, fileContent) =>
-    set({
+    set((state) => ({
       selectedFile,
       fileContent,
       previewContentPath: selectedFile,
+      previewBackStack: pushPreviewHistory(state, selectedFile),
+      previewForwardStack: state.selectedFile === selectedFile ? state.previewForwardStack : [],
       externalPreview: null,
       activeView: "wiki",
+    })),
+  canGoBackInPreview: () => get().previewBackStack.length > 0,
+  canGoForwardInPreview: () => get().previewForwardStack.length > 0,
+  goBackInPreview: () =>
+    set((state) => {
+      const previous = state.previewBackStack[state.previewBackStack.length - 1]
+      if (!previous) return state
+      const current = state.selectedFile
+      return {
+        selectedFile: previous,
+        previewContentPath: null,
+        previewBackStack: state.previewBackStack.slice(0, -1),
+        previewForwardStack: current
+          ? [...state.previewForwardStack, current].slice(-MAX_PREVIEW_HISTORY)
+          : state.previewForwardStack,
+        externalPreview: null,
+        activeView: "wiki",
+      }
+    }),
+  goForwardInPreview: () =>
+    set((state) => {
+      const next = state.previewForwardStack[state.previewForwardStack.length - 1]
+      if (!next) return state
+      const current = state.selectedFile
+      return {
+        selectedFile: next,
+        previewContentPath: null,
+        previewBackStack: current
+          ? [...state.previewBackStack, current].slice(-MAX_PREVIEW_HISTORY)
+          : state.previewBackStack,
+        previewForwardStack: state.previewForwardStack.slice(0, -1),
+        externalPreview: null,
+        activeView: "wiki",
+      }
     }),
   setExternalPreview: (externalPreview) => set({ externalPreview }),
   setPendingScrollImageSrc: (pendingScrollImageSrc) => set({ pendingScrollImageSrc }),
