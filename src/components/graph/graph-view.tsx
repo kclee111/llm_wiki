@@ -16,6 +16,7 @@ import { findSurprisingConnections, detectKnowledgeGaps, type SurprisingConnecti
 import { queueResearch } from "@/lib/deep-research"
 import { optimizeResearchTopic } from "@/lib/optimize-research-topic"
 import { normalizePath } from "@/lib/path-utils"
+import { knowledgeGapAutoResearchKey, selectAutoGraphResearchCandidates } from "@/lib/auto-graph-research"
 import { applyGraphFilters, hasActiveGraphFilters } from "@/lib/graph-filters"
 import { applyGraphSearch } from "@/lib/graph-search"
 import { wikiTypeLabel } from "@/lib/wiki-page-types"
@@ -689,6 +690,9 @@ export function GraphView() {
   const resetGraphViewState = useWikiStore((s) => s.resetGraphViewState)
   const reviewExpansionEnabled = useResearchStore((s) => s.reviewExpansionEnabled)
   const setReviewExpansionEnabled = useResearchStore((s) => s.setReviewExpansionEnabled)
+  const autoDeepResearchEnabled = useResearchStore((s) => s.autoDeepResearchEnabled)
+  const setAutoDeepResearchEnabled = useResearchStore((s) => s.setAutoDeepResearchEnabled)
+  const runningResearchCount = useResearchStore((s) => s.getRunningCount())
   const isDarkMode = useResolvedDarkMode()
   const graphPalette = useMemo(() => graphThemePalette(isDarkMode), [isDarkMode])
   const labelRenderers = useMemo(() => makeLabelRenderers(graphPalette), [graphPalette])
@@ -718,6 +722,7 @@ export function GraphView() {
   // i18n node type labels (populated after mount to support language switching)
   const [nodeTypeLabels, setNodeTypeLabels] = useState<Record<string, string>>({})
   const graphSearchInputRef = useRef<HTMLInputElement>(null)
+  const autoGraphResearchAttemptedRef = useRef<Set<string>>(new Set())
 
   // Research confirmation dialog
   const [researchDialog, setResearchDialog] = useState<{
@@ -816,9 +821,7 @@ export function GraphView() {
     setNodeMenu(null)
   }, [resetGraphViewState])
 
-  const knowledgeGapKey = useCallback((gap: KnowledgeGap) => (
-    `gap:${gap.type}:${gap.title}:${gap.nodeIds.join(",")}`
-  ), [])
+  const knowledgeGapKey = useCallback((gap: KnowledgeGap) => knowledgeGapAutoResearchKey(gap), [])
 
   const visibleKnowledgeGaps = useMemo(
     () => knowledgeGaps.filter((gap) => !dismissedInsights.has(knowledgeGapKey(gap))),
@@ -883,6 +886,61 @@ export function GraphView() {
     }
     setResearchDialog(null)
   }, [researchDialog])
+
+  useEffect(() => {
+    if (!autoDeepResearchEnabled) return
+    if (researchDialog) return
+    if (runningResearchCount > 0) return
+    const candidates = selectAutoGraphResearchCandidates(visibleKnowledgeGaps, {
+      attemptedKeys: autoGraphResearchAttemptedRef.current,
+      dismissedKeys: dismissedInsights,
+      limit: 1,
+    })
+    const gap = candidates[0]
+    if (!gap) return
+    const key = knowledgeGapKey(gap)
+    autoGraphResearchAttemptedRef.current.add(key)
+
+    let cancelled = false
+    async function run() {
+      const store = useWikiStore.getState()
+      if (!store.project) return
+      const pp = normalizePath(store.project.path)
+      let overview = ""
+      let purpose = ""
+      try { overview = await readFile(`${pp}/wiki/overview.md`) } catch {}
+      try { purpose = await readFile(`${pp}/purpose.md`) } catch {}
+      let topic = gap.title
+      let queries = [gap.title]
+      try {
+        const result = await optimizeResearchTopic(
+          store.llmConfig,
+          gap.title,
+          gap.description,
+          gap.type,
+          overview,
+          purpose,
+        )
+        topic = result.topic
+        queries = result.searchQueries
+      } catch {
+        // fallback topic and query are already set
+      }
+      if (cancelled) return
+      queueResearch(pp, topic, store.llmConfig, store.searchApiConfig, queries)
+      setDismissedInsights((prev) => new Set([...prev, key]))
+      setHighlightedNodes(new Set())
+    }
+    run()
+    return () => { cancelled = true }
+  }, [
+    autoDeepResearchEnabled,
+    dismissedInsights,
+    knowledgeGapKey,
+    researchDialog,
+    runningResearchCount,
+    visibleKnowledgeGaps,
+  ])
 
   // Unmount sigma when panels resize or toggle to prevent WebGL crash.
   // Sigma crashes with "could not find suitable program for node type circle"
@@ -1487,20 +1545,34 @@ export function GraphView() {
         {showInsights && (
           <div className="w-80 shrink-0 border-l bg-background overflow-y-auto">
             <div className="px-4 py-3 border-b">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Lightbulb className="h-4 w-4 text-amber-500" />
                   <span className="text-sm font-medium">{t("graph.insights")}</span>
                 </div>
-                <button
-                  className="p-1 rounded hover:bg-muted text-muted-foreground"
-                  onClick={() => {
-                    setShowInsights(false)
-                    setHighlightedNodes(new Set())
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <label
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none"
+                    title={t("research.autoDeepResearchHint")}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-primary"
+                      checked={autoDeepResearchEnabled}
+                      onChange={(event) => setAutoDeepResearchEnabled(event.currentTarget.checked)}
+                    />
+                    <span>{t("research.autoDeepResearch")}</span>
+                  </label>
+                  <button
+                    className="p-1 rounded hover:bg-muted text-muted-foreground"
+                    onClick={() => {
+                      setShowInsights(false)
+                      setHighlightedNodes(new Set())
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
