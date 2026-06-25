@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "@/commands/fs"
 import { autoIngest } from "./ingest"
 import { useWikiStore } from "@/stores/wiki-store"
+import { useResearchStore } from "@/stores/research-store"
 import { normalizePath, isAbsolutePath } from "@/lib/path-utils"
 import { getProjectPathById } from "@/lib/project-identity"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
@@ -14,11 +15,20 @@ export interface IngestTask {
    *  look up the current path via the registry at run time. */
   projectId: string
   sourcePath: string  // relative to project: "raw/sources/folder/file.pdf"
+  sourceKind?: "raw-source" | "research-result" | "manual-save"
+  createdBy?: "file-sync" | "deep-research" | "user"
+  researchTaskId?: string
   folderContext: string  // e.g. "AI-Research > papers" or ""
   status: "pending" | "processing" | "done" | "failed"
   addedAt: number
   error: string | null
   retryCount: number
+}
+
+export interface EnqueueIngestOptions {
+  sourceKind?: IngestTask["sourceKind"]
+  createdBy?: IngestTask["createdBy"]
+  researchTaskId?: string
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -56,7 +66,12 @@ function queueFilePath(projectPath: string): string {
 async function saveQueue(projectPath: string): Promise<void> {
   try {
     // Only save pending and failed tasks (done tasks are removed)
-    const toSave = queue.filter((t) => t.status !== "done")
+    const toSave = queue
+      .filter((t) => t.status !== "done")
+      .map((task) => ({
+        ...task,
+        status: task.status === "processing" ? "pending" : task.status,
+      }))
     await writeFile(queueFilePath(projectPath), JSON.stringify(toSave, null, 2))
   } catch {
     // non-critical
@@ -101,6 +116,7 @@ function upsertQueuedIngestTask(
   projectId: string,
   sourcePath: string,
   folderContext: string,
+  options: EnqueueIngestOptions = {},
 ): string {
   if (queue.length === 0 && !processing) {
     resetQueueAccounting()
@@ -115,6 +131,9 @@ function upsertQueuedIngestTask(
   if (pendingOrFailed) {
     pendingOrFailed.sourcePath = normalizedSourcePath
     pendingOrFailed.folderContext = folderContext || pendingOrFailed.folderContext
+    pendingOrFailed.sourceKind = options.sourceKind ?? pendingOrFailed.sourceKind
+    pendingOrFailed.createdBy = options.createdBy ?? pendingOrFailed.createdBy
+    pendingOrFailed.researchTaskId = options.researchTaskId ?? pendingOrFailed.researchTaskId
     pendingOrFailed.status = "pending"
     pendingOrFailed.error = null
     pendingOrFailed.retryCount = 0
@@ -142,6 +161,9 @@ function upsertQueuedIngestTask(
     id: generateId(),
     projectId,
     sourcePath: normalizedSourcePath,
+    sourceKind: options.sourceKind,
+    createdBy: options.createdBy,
+    researchTaskId: options.researchTaskId,
     folderContext,
     status: "pending",
     addedAt: Date.now(),
@@ -188,6 +210,7 @@ export async function enqueueIngest(
   projectId: string,
   sourcePath: string,
   folderContext: string = "",
+  options: EnqueueIngestOptions = {},
 ): Promise<string> {
   if (!currentProjectId || currentProjectId !== projectId) {
     throw new Error(
@@ -195,7 +218,7 @@ export async function enqueueIngest(
     )
   }
 
-  const id = upsertQueuedIngestTask(projectId, sourcePath, folderContext)
+  const id = upsertQueuedIngestTask(projectId, sourcePath, folderContext, options)
   await saveQueue(currentProjectPath)
 
   processNext(currentProjectId)
@@ -241,6 +264,13 @@ export async function retryTask(taskId: string): Promise<void> {
   task.status = "pending"
   task.error = null
   task.retryCount = 0
+  if (task.researchTaskId) {
+    useResearchStore.getState().updateFollowUpIngest(task.researchTaskId, {
+      status: "queued",
+      ingestTaskId: task.id,
+      error: null,
+    })
+  }
   await saveQueue(currentProjectPath)
   processNext(currentProjectId)
 }
@@ -258,6 +288,13 @@ export async function retryAllFailedTasks(): Promise<number> {
     task.status = "pending"
     task.error = null
     task.retryCount = 0
+    if (task.researchTaskId) {
+      useResearchStore.getState().updateFollowUpIngest(task.researchTaskId, {
+        status: "queued",
+        ingestTaskId: task.id,
+        error: null,
+      })
+    }
     requeued++
   }
 
@@ -547,6 +584,13 @@ async function processNext(projectId: string): Promise<void> {
 
   processing = true
   next.status = "processing"
+  if (next.researchTaskId) {
+    useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
+      status: "processing",
+      ingestTaskId: next.id,
+      error: null,
+    })
+  }
   await saveQueue(pp)
   if (currentProjectId !== projectId) return
 
@@ -594,6 +638,13 @@ async function processNext(projectId: string): Promise<void> {
     queue = queue.filter((t) => t.id !== next.id)
     completedSinceIdle++
     processedSinceDrain = true
+    if (next.researchTaskId) {
+      useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
+        status: "done",
+        ingestTaskId: next.id,
+        error: null,
+      })
+    }
     await saveQueue(pp)
 
     console.log(`[Ingest Queue] Done: ${next.sourcePath}`)
@@ -606,9 +657,23 @@ async function processNext(projectId: string): Promise<void> {
 
     if (next.retryCount >= MAX_RETRIES) {
       next.status = "failed"
+      if (next.researchTaskId) {
+        useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
+          status: "failed",
+          ingestTaskId: next.id,
+          error: message,
+        })
+      }
       console.log(`[Ingest Queue] Failed (${next.retryCount}x): ${next.sourcePath} — ${message}`)
     } else {
       next.status = "pending" // will retry
+      if (next.researchTaskId) {
+        useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
+          status: "queued",
+          ingestTaskId: next.id,
+          error: message,
+        })
+      }
       console.log(`[Ingest Queue] Error (retry ${next.retryCount}/${MAX_RETRIES}): ${next.sourcePath} — ${message}`)
     }
 

@@ -1,7 +1,8 @@
 import { anyTxtSearchSmart, hasConfiguredAnyTxt } from "./anytxt-search"
 import { hasConfiguredSearchProvider, resolveSearchConfig, webSearch } from "./web-search"
 import { streamChat } from "./llm-client"
-import { autoIngest, currentWikiDate } from "./ingest"
+import { currentWikiDate } from "./ingest"
+import { enqueueIngest } from "./ingest-queue"
 import { writeFile, readFile, listDirectory } from "@/commands/fs"
 import { useWikiStore, type LlmConfig, type SearchApiConfig } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
@@ -341,9 +342,26 @@ async function executeResearch(
 
     // Auto-ingest the research result to generate entities, concepts, cross-references
     if (isActiveProjectPath(pp)) {
-      autoIngest(pp, `${pp}/${savedPath}`, llmConfig).catch((err) => {
-        console.error("Failed to auto-ingest research result:", err)
-      })
+      const projectId = useWikiStore.getState().project?.id
+      if (projectId) {
+        try {
+          const ingestTaskId = await enqueueIngest(projectId, savedPath, "Deep Research result", {
+            sourceKind: "research-result",
+            createdBy: "deep-research",
+            researchTaskId: taskId,
+          })
+          updateTaskIfActive(pp, taskId, {
+            followUpIngest: { status: "queued", ingestTaskId, error: null },
+          })
+        } catch (err) {
+          updateTaskIfActive(pp, taskId, {
+            followUpIngest: {
+              status: "failed",
+              error: err instanceof Error ? err.message : String(err),
+            },
+          })
+        }
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

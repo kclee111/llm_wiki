@@ -9,6 +9,11 @@ export interface ResearchTask {
   webResults: WebSearchResult[]
   synthesis: string
   savedPath: string | null
+  followUpIngest?: {
+    status: "queued" | "processing" | "done" | "failed"
+    ingestTaskId?: string
+    error?: string | null
+  }
   error: string | null
   createdAt: number
 }
@@ -20,6 +25,7 @@ interface ResearchState {
 
   addTask: (topic: string) => string
   updateTask: (id: string, updates: Partial<ResearchTask>) => void
+  updateFollowUpIngest: (id: string, updates: NonNullable<ResearchTask["followUpIngest"]>) => void
   removeTask: (id: string) => void
   setPanelOpen: (open: boolean) => void
   getRunningCount: () => number
@@ -57,6 +63,15 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   updateTask: (id, updates) =>
     set((state) => ({
       tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+    })),
+
+  updateFollowUpIngest: (id, updates) =>
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? { ...t, followUpIngest: { ...t.followUpIngest, ...updates } }
+          : t,
+      ),
     })),
 
   removeTask: (id) =>

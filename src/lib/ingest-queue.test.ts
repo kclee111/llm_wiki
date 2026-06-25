@@ -68,6 +68,7 @@ import { autoIngest } from "./ingest"
 import { readFile, writeFile } from "@/commands/fs"
 import { sweepResolvedReviews } from "./sweep-reviews"
 import { useWikiStore } from "@/stores/wiki-store"
+import { useResearchStore } from "@/stores/research-store"
 
 const mockAutoIngest = vi.mocked(autoIngest)
 const mockReadFile = vi.mocked(readFile)
@@ -90,6 +91,7 @@ beforeEach(async () => {
   mockSweep.mockReset()
   mockSweep.mockResolvedValue(0)
   removePageEmbeddingMock.mockReset()
+  useResearchStore.setState({ tasks: [], panelOpen: false })
 
   // Default: persisted queue file doesn't exist
   mockReadFile.mockRejectedValue(new Error("ENOENT"))
@@ -134,6 +136,61 @@ describe("ingest-queue — enqueue & basic processing", () => {
     expect(calls.length).toBeGreaterThan(0)
     const queuePath = calls[0][0]
     expect(queuePath).toContain(".llm-wiki/ingest-queue.json")
+  })
+
+  it("persists in-flight processing tasks as pending so app restarts cannot leave stale processing rows", async () => {
+    mockAutoIngest.mockImplementation(() => new Promise(() => {})) // never resolves
+
+    await enqueueIngest(TEST_ID, "a.md")
+    await flushMicrotasks(5)
+
+    const queueWrites = mockWriteFile.mock.calls.filter(([path]) =>
+      String(path).endsWith("/.llm-wiki/ingest-queue.json"),
+    )
+    expect(queueWrites.length).toBeGreaterThan(0)
+    const latestPayload = queueWrites[queueWrites.length - 1]?.[1]
+    const persisted = JSON.parse(String(latestPayload))
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]).toMatchObject({
+      sourcePath: "a.md",
+      status: "pending",
+    })
+    expect(getQueue()[0].status).toBe("processing")
+  })
+
+  it("updates the linked research task as follow-up ingest starts and completes", async () => {
+    useResearchStore.setState({
+      tasks: [{
+        id: "research-1",
+        topic: "alpha",
+        status: "done",
+        webResults: [],
+        synthesis: "synthesis",
+        savedPath: "wiki/queries/research-alpha.md",
+        followUpIngest: { status: "queued", ingestTaskId: "pending" },
+        error: null,
+        createdAt: 0,
+      }],
+      panelOpen: true,
+    })
+    mockAutoIngest.mockImplementation(async () => {
+      expect(useResearchStore.getState().tasks[0].followUpIngest?.status).toBe("processing")
+      return ["wiki/sources/research-alpha.md"]
+    })
+
+    const id = await enqueueIngest(TEST_ID, "wiki/queries/research-alpha.md", "Deep Research result", {
+      sourceKind: "research-result",
+      createdBy: "deep-research",
+      researchTaskId: "research-1",
+    })
+    await flushMicrotasks(10)
+
+    expect(id).toMatch(/^ingest-/)
+    expect(useResearchStore.getState().tasks[0].followUpIngest).toMatchObject({
+      status: "done",
+      ingestTaskId: id,
+      error: null,
+    })
   })
 
   it("enqueueBatch queues multiple tasks and processes them serially", async () => {

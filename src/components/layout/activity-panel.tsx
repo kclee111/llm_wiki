@@ -344,6 +344,11 @@ export function ActivityPanel() {
 
 function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id: string) => void; onCancel: (id: string) => void }) {
   const fileName = getFileName(task.sourcePath)
+  const kindLabel = task.sourceKind === "research-result"
+    ? "Research result"
+    : task.sourceKind === "manual-save"
+      ? "Manual save"
+      : "Source ingest"
 
   return (
     <div className="px-3 py-2 text-xs border-b border-border/50">
@@ -354,7 +359,12 @@ function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id:
           {task.status === "failed" && <AlertCircle className="h-3 w-3 text-destructive" />}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{fileName}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="truncate font-medium">{fileName}</div>
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {kindLabel}
+            </span>
+          </div>
           {task.folderContext && (
             <div className="text-[10px] text-muted-foreground/70 truncate">{task.folderContext}</div>
           )}

@@ -50,6 +50,12 @@
       "saved": "已保存",
       "done": "已完成",
       "failed": "失败"
+    },
+    "followUpIngest": {
+      "queued": "后续提取已排队",
+      "processing": "后续提取进行中",
+      "done": "后续提取完成",
+      "failed": "后续提取失败"
     }
   },
   "project": {

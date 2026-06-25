@@ -31,6 +31,9 @@ export function ResearchPanel() {
   const searchApiConfig = useWikiStore((s) => s.searchApiConfig)
   const [inputValue, setInputValue] = useState("")
 
+  const followUpActive = tasks.filter((t) =>
+    t.followUpIngest?.status === "queued" || t.followUpIngest?.status === "processing"
+  )
   const running = tasks.filter((t) => ["searching", "synthesizing", "saving"].includes(t.status))
   const queued = tasks.filter((t) => t.status === "queued")
   const done = tasks.filter((t) => t.status === "done" || t.status === "error")
@@ -52,9 +55,9 @@ export function ResearchPanel() {
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold">{t("research.title")}</span>
-          {(running.length > 0 || queued.length > 0) && (
+          {(running.length > 0 || queued.length > 0 || followUpActive.length > 0) && (
             <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-              {t("research.activeBadge", { running: running.length, queued: queued.length })}
+              {t("research.activeBadge", { running: running.length + followUpActive.length, queued: queued.length })}
             </span>
           )}
         </div>
@@ -243,6 +246,13 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
     error: t("research.status.failed"),
   }[task.status]
 
+  const followUpStatusText = task.followUpIngest ? {
+    queued: t("research.followUpIngest.queued"),
+    processing: t("research.followUpIngest.processing"),
+    done: t("research.followUpIngest.done"),
+    failed: t("research.followUpIngest.failed"),
+  }[task.followUpIngest.status] : null
+
   async function handleOpenSaved() {
     if (!project || !task.savedPath) return
     const path = `${normalizePath(project.path)}/${task.savedPath}`
@@ -332,6 +342,21 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
               </Button>
             )}
           </div>
+          {followUpStatusText && (
+            <div className="mt-2 flex items-center gap-1.5 rounded bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground">
+              {task.followUpIngest?.status === "queued" || task.followUpIngest?.status === "processing" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : task.followUpIngest?.status === "failed" ? (
+                <AlertCircle className="h-3 w-3 text-destructive" />
+              ) : (
+                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              )}
+              <span>{followUpStatusText}</span>
+              {task.followUpIngest?.error && (
+                <span className="truncate text-destructive">{task.followUpIngest.error}</span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

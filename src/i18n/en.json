@@ -50,6 +50,12 @@
       "saved": "Saved",
       "done": "Done",
       "failed": "Failed"
+    },
+    "followUpIngest": {
+      "queued": "Follow-up ingest queued",
+      "processing": "Follow-up ingest running",
+      "done": "Follow-up ingest complete",
+      "failed": "Follow-up ingest failed"
     }
   },
   "project": {
