@@ -17,6 +17,7 @@ import {
   updateResearchHistory,
   type ResearchTriggerMetadata,
 } from "@/lib/research-history"
+import { useReviewStore } from "@/stores/review-store"
 
 const MAX_RESEARCH_SOURCES = 20
 
@@ -354,6 +355,15 @@ async function executeResearch(
       await appendResearchLogSummary(pp, historyEntry)
     } catch (err) {
       console.warn("[DeepResearch] failed to persist research history:", err)
+    }
+    if (
+      savedTask?.triggerMetadata?.trigger === "auto-review" &&
+      savedTask.triggerMetadata.sourceReviewId
+    ) {
+      useReviewStore.getState().resolveItem(
+        savedTask.triggerMetadata.sourceReviewId,
+        "Auto Deep Research completed",
+      )
     }
 
     // Refresh tree

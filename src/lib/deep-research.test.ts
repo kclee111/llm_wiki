@@ -31,6 +31,7 @@ import { streamChat } from "./llm-client"
 import { enqueueIngest } from "./ingest-queue"
 import { webSearch } from "./web-search"
 import { useResearchStore } from "@/stores/research-store"
+import { useReviewStore } from "@/stores/review-store"
 import { useWikiStore } from "@/stores/wiki-store"
 
 const webResult: WebSearchResult = {
@@ -76,6 +77,7 @@ beforeEach(() => {
   vi.mocked(streamChat).mockReset()
   vi.mocked(webSearch).mockReset()
   useResearchStore.setState({ tasks: [], panelOpen: false, reviewExpansionEnabled: false })
+  useReviewStore.setState({ items: [] })
   useWikiStore.getState().setProject({
     id: "project-id",
     name: "Project",
@@ -287,6 +289,18 @@ describe("queueResearch follow-up ingest", () => {
       handlers.onToken("synthesis")
       handlers.onDone()
     })
+    useReviewStore.getState().setItems([
+      {
+        id: "review-1",
+        type: "suggestion",
+        title: "Research alpha",
+        description: "Research alpha details",
+        searchQueries: ["alpha"],
+        options: [],
+        resolved: false,
+        createdAt: 0,
+      },
+    ])
 
     queueResearch("/project", "alpha", llmConfig, searchConfig, ["alpha"], {
       trigger: "auto-review",
@@ -336,6 +350,11 @@ describe("queueResearch follow-up ingest", () => {
       sourceReviewId: "review-1",
       sourceReviewTitle: "Research alpha",
       followUpIngest: { status: "queued", ingestTaskId: "ingest-research", error: null },
+    })
+    expect(useReviewStore.getState().items[0]).toMatchObject({
+      id: "review-1",
+      resolved: true,
+      resolvedAction: "Auto Deep Research completed",
     })
   })
 
