@@ -4,6 +4,7 @@ import type { LlmConfig, SearchApiConfig } from "@/stores/wiki-store"
 import type { WebSearchResult } from "./web-search"
 
 vi.mock("@/commands/fs", () => ({
+  createDirectory: vi.fn(),
   readFile: vi.fn(),
   writeFile: vi.fn(),
   listDirectory: vi.fn(),
@@ -25,7 +26,7 @@ vi.mock("./web-search", async () => {
   }
 })
 
-import { readFile, writeFile } from "@/commands/fs"
+import { createDirectory, readFile, writeFile } from "@/commands/fs"
 import { streamChat } from "./llm-client"
 import { enqueueIngest } from "./ingest-queue"
 import { webSearch } from "./web-search"
@@ -67,6 +68,8 @@ const searchConfig = config({ deepResearchSource: "web", provider: "tavily", api
 
 beforeEach(() => {
   vi.useRealTimers()
+  vi.mocked(createDirectory).mockReset()
+  vi.mocked(createDirectory).mockResolvedValue(undefined)
   vi.mocked(readFile).mockReset()
   vi.mocked(writeFile).mockReset()
   vi.mocked(enqueueIngest).mockReset()
@@ -266,8 +269,18 @@ describe("collectResearchSources", () => {
 describe("queueResearch follow-up ingest", () => {
   it("queues the saved research page for ingest instead of calling auto-ingest outside the queue", async () => {
     vi.useFakeTimers()
-    vi.mocked(readFile).mockResolvedValue("# Index")
-    vi.mocked(writeFile).mockResolvedValue(undefined as unknown as void)
+    let historyRaw = ""
+    vi.mocked(readFile).mockImplementation((path: string) => {
+      if (path.endsWith("research-history.json")) {
+        return historyRaw ? Promise.resolve(historyRaw) : Promise.reject(new Error("missing"))
+      }
+      if (path.endsWith("log.md")) return Promise.resolve("# Wiki Log\n")
+      return Promise.resolve("# Index")
+    })
+    vi.mocked(writeFile).mockImplementation((path: string, contents: string) => {
+      if (path.endsWith("research-history.json")) historyRaw = contents
+      return Promise.resolve(undefined as unknown as void)
+    })
     vi.mocked(enqueueIngest).mockResolvedValue("ingest-research")
     vi.mocked(webSearch).mockResolvedValue([webResult])
     vi.mocked(streamChat).mockImplementation(async (_llm, _messages, handlers) => {
@@ -275,7 +288,12 @@ describe("queueResearch follow-up ingest", () => {
       handlers.onDone()
     })
 
-    queueResearch("/project", "alpha", llmConfig, searchConfig, ["alpha"])
+    queueResearch("/project", "alpha", llmConfig, searchConfig, ["alpha"], {
+      trigger: "auto-review",
+      autoQueued: true,
+      sourceReviewId: "review-1",
+      sourceReviewTitle: "Research alpha",
+    })
     await vi.runOnlyPendingTimersAsync()
     await vi.runOnlyPendingTimersAsync()
     await Promise.resolve()
@@ -292,15 +310,42 @@ describe("queueResearch follow-up ingest", () => {
       },
     )
     const task = useResearchStore.getState().tasks[0]
+    expect(task.triggerMetadata).toMatchObject({
+      trigger: "auto-review",
+      autoQueued: true,
+      sourceReviewId: "review-1",
+    })
     expect(task.followUpIngest).toMatchObject({
       status: "queued",
       ingestTaskId: "ingest-research",
+    })
+    const historyWrites = vi.mocked(writeFile).mock.calls.filter(([path]) =>
+      path === "/project/.llm-wiki/research-history.json"
+    )
+    const historyWrite = historyWrites[historyWrites.length - 1]
+    expect(historyWrite).toBeTruthy()
+    const history = JSON.parse(String(historyWrite?.[1]))
+    expect(history[0]).toMatchObject({
+      id: task.id,
+      topic: "alpha",
+      trigger: "auto-review",
+      autoQueued: true,
+      reviewExpansion: false,
+      reviewMode: "suppressed",
+      savedPath: expect.stringMatching(/^wiki\/queries\/research-alpha-/),
+      sourceReviewId: "review-1",
+      sourceReviewTitle: "Research alpha",
+      followUpIngest: { status: "queued", ingestTaskId: "ingest-research", error: null },
     })
   })
 
   it("allows review expansion for the follow-up ingest when the Review toggle is enabled", async () => {
     vi.useFakeTimers()
-    vi.mocked(readFile).mockResolvedValue("# Index")
+    vi.mocked(readFile).mockImplementation((path: string) => {
+      if (path.endsWith("research-history.json")) return Promise.reject(new Error("missing"))
+      if (path.endsWith("log.md")) return Promise.resolve("# Wiki Log\n")
+      return Promise.resolve("# Index")
+    })
     vi.mocked(writeFile).mockResolvedValue(undefined as unknown as void)
     vi.mocked(enqueueIngest).mockResolvedValue("ingest-research")
     vi.mocked(webSearch).mockResolvedValue([webResult])

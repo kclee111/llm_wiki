@@ -5,6 +5,7 @@ import { useResearchStore } from "@/stores/research-store"
 import { normalizePath, isAbsolutePath } from "@/lib/path-utils"
 import { getProjectPathById } from "@/lib/project-identity"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
+import { updateResearchHistory } from "@/lib/research-history"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,17 @@ let processedSinceDrain = false
 // Abort controller for the review-sweep LLM call so switching projects
 // cancels a long-running judgment instead of burning tokens.
 let sweepAbortController: AbortController | null = null
+
+function updateResearchFollowUp(
+  projectPath: string,
+  researchTaskId: string | undefined,
+  followUpIngest: NonNullable<ReturnType<typeof useResearchStore.getState>["tasks"][number]["followUpIngest"]>,
+): void {
+  if (!researchTaskId) return
+  useResearchStore.getState().updateFollowUpIngest(researchTaskId, followUpIngest)
+  Promise.resolve(updateResearchHistory(projectPath, researchTaskId, { followUpIngest }))
+    .catch((err) => console.warn("[Ingest Queue] failed to update research history:", err))
+}
 
 function resetQueueAccounting(): void {
   completedSinceIdle = 0
@@ -268,13 +280,11 @@ export async function retryTask(taskId: string): Promise<void> {
   task.status = "pending"
   task.error = null
   task.retryCount = 0
-  if (task.researchTaskId) {
-    useResearchStore.getState().updateFollowUpIngest(task.researchTaskId, {
-      status: "queued",
-      ingestTaskId: task.id,
-      error: null,
-    })
-  }
+  updateResearchFollowUp(currentProjectPath, task.researchTaskId, {
+    status: "queued",
+    ingestTaskId: task.id,
+    error: null,
+  })
   await saveQueue(currentProjectPath)
   processNext(currentProjectId)
 }
@@ -292,13 +302,11 @@ export async function retryAllFailedTasks(): Promise<number> {
     task.status = "pending"
     task.error = null
     task.retryCount = 0
-    if (task.researchTaskId) {
-      useResearchStore.getState().updateFollowUpIngest(task.researchTaskId, {
-        status: "queued",
-        ingestTaskId: task.id,
-        error: null,
-      })
-    }
+    updateResearchFollowUp(currentProjectPath, task.researchTaskId, {
+      status: "queued",
+      ingestTaskId: task.id,
+      error: null,
+    })
     requeued++
   }
 
@@ -588,13 +596,11 @@ async function processNext(projectId: string): Promise<void> {
 
   processing = true
   next.status = "processing"
-  if (next.researchTaskId) {
-    useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
-      status: "processing",
-      ingestTaskId: next.id,
-      error: null,
-    })
-  }
+  updateResearchFollowUp(pp, next.researchTaskId, {
+    status: "processing",
+    ingestTaskId: next.id,
+    error: null,
+  })
   await saveQueue(pp)
   if (currentProjectId !== projectId) return
 
@@ -649,13 +655,11 @@ async function processNext(projectId: string): Promise<void> {
     queue = queue.filter((t) => t.id !== next.id)
     completedSinceIdle++
     processedSinceDrain = true
-    if (next.researchTaskId) {
-      useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
-        status: "done",
-        ingestTaskId: next.id,
-        error: null,
-      })
-    }
+    updateResearchFollowUp(pp, next.researchTaskId, {
+      status: "done",
+      ingestTaskId: next.id,
+      error: null,
+    })
     await saveQueue(pp)
 
     console.log(`[Ingest Queue] Done: ${next.sourcePath}`)
@@ -668,23 +672,19 @@ async function processNext(projectId: string): Promise<void> {
 
     if (next.retryCount >= MAX_RETRIES) {
       next.status = "failed"
-      if (next.researchTaskId) {
-        useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
-          status: "failed",
-          ingestTaskId: next.id,
-          error: message,
-        })
-      }
+      updateResearchFollowUp(pp, next.researchTaskId, {
+        status: "failed",
+        ingestTaskId: next.id,
+        error: message,
+      })
       console.log(`[Ingest Queue] Failed (${next.retryCount}x): ${next.sourcePath} — ${message}`)
     } else {
       next.status = "pending" // will retry
-      if (next.researchTaskId) {
-        useResearchStore.getState().updateFollowUpIngest(next.researchTaskId, {
-          status: "queued",
-          ingestTaskId: next.id,
-          error: message,
-        })
-      }
+      updateResearchFollowUp(pp, next.researchTaskId, {
+        status: "queued",
+        ingestTaskId: next.id,
+        error: message,
+      })
       console.log(`[Ingest Queue] Error (retry ${next.retryCount}/${MAX_RETRIES}): ${next.sourcePath} — ${message}`)
     }
 

@@ -729,6 +729,8 @@ export function GraphView() {
     loading: boolean
     topic: string
     queries: string[]
+    gapTitle: string
+    gapType: string
     dismissKey?: string
   } | null>(null)
   const lastLoadedVersion = useRef(-1)
@@ -843,7 +845,7 @@ export function GraphView() {
     researchDialogTokenRef.current = token
 
     // Show loading state
-    setResearchDialog({ loading: true, topic: "", queries: [], dismissKey })
+    setResearchDialog({ loading: true, topic: "", queries: [], gapTitle, gapType, dismissKey })
 
     try {
       // Read overview and purpose for context
@@ -861,11 +863,11 @@ export function GraphView() {
         purpose,
       )
       if (researchDialogTokenRef.current !== token) return
-      setResearchDialog({ loading: false, topic: result.topic, queries: result.searchQueries, dismissKey })
+      setResearchDialog({ loading: false, topic: result.topic, queries: result.searchQueries, gapTitle, gapType, dismissKey })
     } catch {
       if (researchDialogTokenRef.current !== token) return
       // Fallback: use raw title
-      setResearchDialog({ loading: false, topic: gapTitle, queries: [gapTitle], dismissKey })
+      setResearchDialog({ loading: false, topic: gapTitle, queries: [gapTitle], gapTitle, gapType, dismissKey })
     }
   }, [])
 
@@ -879,6 +881,12 @@ export function GraphView() {
       store.llmConfig,
       store.searchApiConfig,
       researchDialog.queries,
+      {
+        trigger: "graph-insight",
+        autoQueued: false,
+        graphInsightTitle: researchDialog.gapTitle,
+        graphInsightType: researchDialog.gapType,
+      },
     )
     if (researchDialog.dismissKey) {
       setDismissedInsights((prev) => new Set([...prev, researchDialog.dismissKey!]))
@@ -927,7 +935,12 @@ export function GraphView() {
         // fallback topic and query are already set
       }
       if (cancelled) return
-      queueResearch(pp, topic, store.llmConfig, store.searchApiConfig, queries)
+      queueResearch(pp, topic, store.llmConfig, store.searchApiConfig, queries, {
+        trigger: "graph-insight",
+        autoQueued: true,
+        graphInsightTitle: gap.title,
+        graphInsightType: gap.type,
+      })
       setDismissedInsights((prev) => new Set([...prev, key]))
       setHighlightedNodes(new Set())
     }

@@ -50,6 +50,10 @@ vi.mock("@/lib/project-identity", () => ({
   loadRegistry: vi.fn(),
 }))
 
+vi.mock("@/lib/research-history", () => ({
+  updateResearchHistory: vi.fn(),
+}))
+
 import {
   enqueueIngest,
   enqueueBatch,
@@ -69,11 +73,13 @@ import { readFile, writeFile } from "@/commands/fs"
 import { sweepResolvedReviews } from "./sweep-reviews"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
+import { updateResearchHistory } from "@/lib/research-history"
 
 const mockAutoIngest = vi.mocked(autoIngest)
 const mockReadFile = vi.mocked(readFile)
 const mockWriteFile = vi.mocked(writeFile)
 const mockSweep = vi.mocked(sweepResolvedReviews)
+const mockUpdateResearchHistory = vi.mocked(updateResearchHistory)
 
 /** Simulate the app having opened `TEST_ID` at `TEST_PATH` so the queue
  *  module's `currentProjectId` / `currentProjectPath` are set. Most
@@ -192,6 +198,16 @@ describe("ingest-queue — enqueue & basic processing", () => {
       ingestTaskId: id,
       error: null,
     })
+    expect(mockUpdateResearchHistory).toHaveBeenCalledWith(
+      TEST_PATH,
+      "research-1",
+      { followUpIngest: { status: "processing", ingestTaskId: id, error: null } },
+    )
+    expect(mockUpdateResearchHistory).toHaveBeenCalledWith(
+      TEST_PATH,
+      "research-1",
+      { followUpIngest: { status: "done", ingestTaskId: id, error: null } },
+    )
   })
 
   it("enqueueBatch queues multiple tasks and processes them serially", async () => {
@@ -479,7 +495,8 @@ describe("ingest-queue — clearQueueState", () => {
     mockAutoIngest.mockResolvedValue(["wiki/sources/foo.md"])
     await enqueueIngest(TEST_ID, "x.md")
     await flushMicrotasks(20)
-    mockSweep.mockClear()
+  mockSweep.mockClear()
+  mockUpdateResearchHistory.mockReset()
 
     clearQueueState()
     // Simulate new drain trigger on an empty queue — no sweep.

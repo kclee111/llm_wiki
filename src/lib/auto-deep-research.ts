@@ -58,6 +58,12 @@ export function runAutoDeepResearchForReviews(
       wikiStore.llmConfig,
       wikiStore.searchApiConfig,
       item.searchQueries,
+      {
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: item.id,
+        sourceReviewTitle: item.title,
+      },
     )
     useReviewStore.getState().resolveItem(item.id, AUTO_RESOLVED_ACTION)
     queued++

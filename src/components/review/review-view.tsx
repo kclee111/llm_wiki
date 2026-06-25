@@ -58,7 +58,12 @@ export function ReviewView() {
         const llmConfig = useWikiStore.getState().llmConfig
         // Use pre-generated search queries if available, otherwise fall back to title
         const topic = item.title.replace(/^(Save to Wiki|Create|Research)[:\s]*/i, "").trim() || item.description.split("\n")[0]
-        queueResearch(pp, topic, llmConfig, searchConfig, item.searchQueries)
+        queueResearch(pp, topic, llmConfig, searchConfig, item.searchQueries, {
+          trigger: "manual-review",
+          autoQueued: false,
+          sourceReviewId: item.id,
+          sourceReviewTitle: item.title,
+        })
         resolveItem(id, "Queued for research")
       } else {
         resolveItem(id, action)
@@ -158,7 +163,12 @@ export function ReviewView() {
       if (item) {
         const llmConfig = useWikiStore.getState().llmConfig
         const topic = action.replace(/^research\s*/i, "").trim() || item.description.split("\n")[0]
-        queueResearch(pp, topic, llmConfig, searchConfig)
+        queueResearch(pp, topic, llmConfig, searchConfig, undefined, {
+          trigger: "manual-review",
+          autoQueued: false,
+          sourceReviewId: item.id,
+          sourceReviewTitle: item.title,
+        })
         resolveItem(id, "Queued for deep research")
       } else {
         resolveItem(id, action)

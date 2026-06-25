@@ -1,11 +1,13 @@
 import { create } from "zustand"
 import type { WebSearchResult } from "@/lib/web-search"
+import type { ResearchTriggerMetadata } from "@/lib/research-history"
 
 export interface ResearchTask {
   id: string
   topic: string
   searchQueries?: string[]
   reviewExpansion: boolean
+  triggerMetadata?: ResearchTriggerMetadata
   status: "queued" | "searching" | "synthesizing" | "saving" | "done" | "error"
   webResults: WebSearchResult[]
   synthesis: string
@@ -26,7 +28,7 @@ interface ResearchState {
   reviewExpansionEnabled: boolean
   autoDeepResearchEnabled: boolean
 
-  addTask: (topic: string) => string
+  addTask: (topic: string, triggerMetadata?: ResearchTriggerMetadata) => string
   updateTask: (id: string, updates: Partial<ResearchTask>) => void
   updateFollowUpIngest: (id: string, updates: NonNullable<ResearchTask["followUpIngest"]>) => void
   removeTask: (id: string) => void
@@ -46,7 +48,7 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
   reviewExpansionEnabled: false,
   autoDeepResearchEnabled: false,
 
-  addTask: (topic) => {
+  addTask: (topic, triggerMetadata) => {
     const id = `research-${++counter}`
     const reviewExpansion = get().reviewExpansionEnabled
     set((state) => ({
@@ -56,6 +58,7 @@ export const useResearchStore = create<ResearchState>((set, get) => ({
           id,
           topic,
           reviewExpansion,
+          triggerMetadata,
           status: "queued",
           webResults: [],
           synthesis: "",

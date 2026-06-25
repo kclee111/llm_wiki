@@ -49,7 +49,10 @@ export function ResearchPanel() {
       window.alert(t("research.notConfigured"))
       return
     }
-    queueResearch(normalizePath(project.path), topic, llmConfig, searchApiConfig)
+    queueResearch(normalizePath(project.path), topic, llmConfig, searchApiConfig, undefined, {
+      trigger: "research-panel",
+      autoQueued: false,
+    })
     setInputValue("")
   }
 

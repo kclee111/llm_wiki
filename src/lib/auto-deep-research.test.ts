@@ -103,6 +103,12 @@ describe("runAutoDeepResearchForReviews", () => {
       expect.objectContaining({ model: "gpt-4" }),
       expect.objectContaining({ provider: "tavily" }),
       ["alpha query"],
+      {
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: "review-1",
+        sourceReviewTitle: "Research alpha",
+      },
     )
     expect(useReviewStore.getState().items[0]).toMatchObject({
       resolved: true,
@@ -139,6 +145,11 @@ describe("runAutoDeepResearchForReviews", () => {
       expect.any(Object),
       expect.any(Object),
       ["alpha query"],
+      expect.objectContaining({
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: "review-1",
+      }),
     )
   })
 })
@@ -176,6 +187,12 @@ describe("setupAutoDeepResearch", () => {
       expect.objectContaining({ model: "gpt-4" }),
       expect.objectContaining({ provider: "tavily" }),
       ["beta query"],
+      {
+        trigger: "auto-review",
+        autoQueued: true,
+        sourceReviewId: expect.any(String),
+        sourceReviewTitle: "Research beta",
+      },
     )
     expect(useReviewStore.getState().items[0]).toMatchObject({
       resolved: true,

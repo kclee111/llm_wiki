@@ -10,6 +10,13 @@ import { normalizePath } from "@/lib/path-utils"
 import { buildLanguageDirective } from "@/lib/output-language"
 import { makeQueryFileName } from "@/lib/wiki-filename"
 import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
+import {
+  appendResearchHistory,
+  appendResearchLogSummary,
+  makeResearchHistoryEntry,
+  updateResearchHistory,
+  type ResearchTriggerMetadata,
+} from "@/lib/research-history"
 
 const MAX_RESEARCH_SOURCES = 20
 
@@ -66,9 +73,10 @@ export function queueResearch(
   llmConfig: LlmConfig,
   searchConfig: SearchApiConfig,
   searchQueries?: string[],
+  triggerMetadata?: ResearchTriggerMetadata,
 ): string {
   const store = useResearchStore.getState()
-  const taskId = store.addTask(topic)
+  const taskId = store.addTask(topic, triggerMetadata)
   // Store search queries on the task
   if (searchQueries && searchQueries.length > 0) {
     store.updateTask(taskId, { searchQueries })
@@ -330,6 +338,24 @@ async function executeResearch(
       savedPath,
     })) return
 
+    const savedTask = useResearchStore.getState().tasks.find((t) => t.id === taskId)
+    const historyEntry = makeResearchHistoryEntry({
+      id: taskId,
+      createdAt: savedTask?.createdAt ?? Date.now(),
+      topic,
+      status: "done",
+      reviewExpansion: savedTask?.reviewExpansion ?? false,
+      searchQueries: queries,
+      savedPath,
+      metadata: savedTask?.triggerMetadata,
+    })
+    try {
+      await appendResearchHistory(pp, historyEntry)
+      await appendResearchLogSummary(pp, historyEntry)
+    } catch (err) {
+      console.warn("[DeepResearch] failed to persist research history:", err)
+    }
+
     // Refresh tree
     try {
       const tree = await listDirectory(pp)
@@ -354,14 +380,25 @@ async function executeResearch(
             researchTaskId: taskId,
             reviewMode,
           })
+          await updateResearchHistory(pp, taskId, {
+            reviewMode,
+            followUpIngest: { status: "queued", ingestTaskId, error: null },
+          })
           updateTaskIfActive(pp, taskId, {
             followUpIngest: { status: "queued", ingestTaskId, error: null },
           })
         } catch (err) {
+          const error = err instanceof Error ? err.message : String(err)
+          await updateResearchHistory(pp, taskId, {
+            followUpIngest: {
+              status: "failed",
+              error,
+            },
+          })
           updateTaskIfActive(pp, taskId, {
             followUpIngest: {
               status: "failed",
-              error: err instanceof Error ? err.message : String(err),
+              error,
             },
           })
         }
@@ -370,6 +407,10 @@ async function executeResearch(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     updateTaskIfActive(pp, taskId, {
+      status: "error",
+      error: message,
+    })
+    await updateResearchHistory(pp, taskId, {
       status: "error",
       error: message,
     })
