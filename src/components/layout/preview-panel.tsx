@@ -6,12 +6,14 @@ import { getFileCategory, isBinary, isExtractedTextPreviewFile } from "@/lib/fil
 import { WikiEditor } from "@/components/editor/wiki-editor"
 import { FilePreview } from "@/components/editor/file-preview"
 import { getFileName } from "@/lib/path-utils"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 
 export function PreviewPanel() {
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const fileContent = useWikiStore((s) => s.fileContent)
   const previewContentPath = useWikiStore((s) => s.previewContentPath)
   const externalPreview = useWikiStore((s) => s.externalPreview)
+  const project = useWikiStore((s) => s.project)
   const setFileContent = useWikiStore((s) => s.setFileContent)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -57,13 +59,16 @@ export function PreviewPanel() {
   }, [selectedFile, previewContentPath, externalPreview, setFileContent])
 
   const writeNow = useCallback((path: string, markdown: string, syncStore = false) => {
-    writeFile(path, markdown)
+    const write = project
+      ? writeWikiMarkdownWithLog(project.path, path, markdown, { operation: "update", source: "Editor save" })
+      : writeFile(path, markdown)
+    write
       .then(() => {
         lastLoadedRef.current = markdown
         if (syncStore) setFileContent(markdown)
       })
       .catch((err) => console.error("Failed to save:", err))
-  }, [setFileContent])
+  }, [project, setFileContent])
 
   const handleSave = useCallback(
     (markdown: string, options?: { immediate?: boolean }) => {

@@ -1,7 +1,8 @@
-import { createDirectory, fileExists, readFile, writeFile } from "@/commands/fs"
+import { createDirectory, fileExists, readFile } from "@/commands/fs"
 import { getFileName, normalizePath } from "@/lib/path-utils"
 import { makeQuerySlug } from "@/lib/wiki-filename"
 import type { LintResult } from "@/lib/lint"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 
 export function lintLinkTarget(target: string): string {
   return normalizePath(target)
@@ -60,21 +61,30 @@ export async function applySuggestedLinkFix(projectPath: string, item: LintResul
   if (item.type === "orphan" && item.suggestedSource) {
     const sourcePath = `${pp}/wiki/${item.suggestedSource}`
     const content = await readFile(sourcePath)
-    await writeFile(sourcePath, appendWikilink(content, item.page))
+    await writeWikiMarkdownWithLog(pp, sourcePath, appendWikilink(content, item.page), {
+      operation: "autofix",
+      source: "Lint orphan suggested source",
+    })
     return true
   }
 
   if (item.type === "broken-link" && item.brokenTarget && item.suggestedTarget) {
     const pagePath = `${pp}/wiki/${item.page}`
     const content = await readFile(pagePath)
-    await writeFile(pagePath, rewriteWikilinkTarget(content, item.brokenTarget, item.suggestedTarget))
+    await writeWikiMarkdownWithLog(pp, pagePath, rewriteWikilinkTarget(content, item.brokenTarget, item.suggestedTarget), {
+      operation: "autofix",
+      source: "Lint broken-link suggestion",
+    })
     return true
   }
 
   if (item.type === "no-outlinks" && item.suggestedTarget) {
     const pagePath = `${pp}/wiki/${item.page}`
     const content = await readFile(pagePath)
-    await writeFile(pagePath, appendWikilink(content, item.suggestedTarget))
+    await writeWikiMarkdownWithLog(pp, pagePath, appendWikilink(content, item.suggestedTarget), {
+      operation: "autofix",
+      source: "Lint no-outlinks suggestion",
+    })
     return true
   }
 
@@ -160,6 +170,9 @@ export async function ensureBrokenLinkStub(
     "Created by Wiki Lint as a placeholder for a missing wikilink target.",
     "",
   ].join("\n")
-  await writeFile(fullPath, content)
+  await writeWikiMarkdownWithLog(projectPath, fullPath, content, {
+    operation: "create",
+    source: "Lint broken-link stub",
+  })
   return { fullPath, relativePath, created: true }
 }

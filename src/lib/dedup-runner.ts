@@ -15,6 +15,7 @@ import {
 } from "@/lib/dedup_embedding"
 import { loadEmbeddingConfig } from "@/lib/project-store"
 import { normalizePath } from "@/lib/path-utils"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 import type { EmbeddingConfig, LlmConfig } from "@/stores/wiki-store"
 import type { FileNode } from "@/types/wiki"
 
@@ -429,11 +430,17 @@ export async function executeMerge(
   }
 
   // 3. Write canonical
-  await writeFile(`${pp}/${result.canonicalPath}`, result.canonicalContent)
+  await writeWikiMarkdownWithLog(pp, `${pp}/${result.canonicalPath}`, result.canonicalContent, {
+    operation: "autofix",
+    source: "Dedup merge",
+  })
 
   // 4. Apply rewrites
   for (const r of result.rewrites) {
-    await writeFile(`${pp}/${r.path}`, r.newContent)
+    await writeWikiMarkdownWithLog(pp, `${pp}/${r.path}`, r.newContent, {
+      operation: "autofix",
+      source: "Dedup reference rewrite",
+    })
   }
 
   // 5. Delete merged-away pages
@@ -455,7 +462,10 @@ export async function executeMerge(
     )
     const rewritten = rewriteIndexMd(indexEntry.content, removed)
     if (rewritten !== indexEntry.content) {
-      await writeFile(indexPath, rewritten)
+      await writeWikiMarkdownWithLog(pp, indexPath, rewritten, {
+        operation: "autofix",
+        source: "Dedup index cleanup",
+      })
     }
   }
 

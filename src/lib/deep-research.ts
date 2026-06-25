@@ -3,12 +3,13 @@ import { hasConfiguredSearchProvider, resolveSearchConfig, webSearch } from "./w
 import { streamChat } from "./llm-client"
 import { currentWikiDate } from "./ingest"
 import { enqueueIngest } from "./ingest-queue"
-import { writeFile, readFile, listDirectory } from "@/commands/fs"
+import { readFile, listDirectory } from "@/commands/fs"
 import { useWikiStore, type LlmConfig, type SearchApiConfig } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
 import { normalizePath } from "@/lib/path-utils"
 import { buildLanguageDirective } from "@/lib/output-language"
 import { makeQueryFileName } from "@/lib/wiki-filename"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 
 const MAX_RESEARCH_SOURCES = 20
 
@@ -321,7 +322,7 @@ async function executeResearch(
       "",
     ].join("\n")
 
-    await writeFile(filePath, pageContent)
+    await writeWikiMarkdownWithLog(pp, filePath, pageContent, { source: "Deep Research" })
     const savedPath = `wiki/queries/${fileName}`
 
     if (!updateTaskIfActive(pp, taskId, {

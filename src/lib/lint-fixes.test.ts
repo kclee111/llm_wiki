@@ -174,9 +174,12 @@ describe("applySuggestedLinkFix", () => {
 
 describe("applySuggestedLinkFixes", () => {
   it("applies all suggested link fixes and returns only unresolved lint items", async () => {
-    fsMocks.readFile
-      .mockResolvedValueOnce("# EMS\n")
-      .mockResolvedValueOnce("# ISO\n")
+    fsMocks.readFile.mockImplementation((path: string) => {
+      if (path.endsWith("/wiki/log.md")) return Promise.resolve("# Wiki Log\n")
+      if (path.endsWith("/wiki/concepts/ems.md")) return Promise.resolve("# EMS\n")
+      if (path.endsWith("/wiki/concepts/iso-50001.md")) return Promise.resolve("# ISO\n")
+      return Promise.reject(new Error(`unexpected read: ${path}`))
+    })
 
     const unresolved = {
       type: "broken-link" as const,

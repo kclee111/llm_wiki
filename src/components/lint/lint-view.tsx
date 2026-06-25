@@ -18,14 +18,15 @@ import { useReviewStore } from "@/stores/review-store"
 import { useLintStore, type LintItem } from "@/stores/lint-store"
 import { runStructuralLint, runSemanticLint } from "@/lib/lint"
 import { hasUsableLlm } from "@/lib/has-usable-llm"
-import { readFile, writeFile, listDirectory } from "@/commands/fs"
+import { readFile, listDirectory } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 import {
-  appendWikilink,
+  applySuggestedLinkFix,
   applySuggestedLinkFixes,
   ensureBrokenLinkStub,
   rewriteWikilinkTarget,
 } from "@/lib/lint-fixes"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 import { useTranslation } from "react-i18next"
 
 export function groupLintResultsForDisplay(results: readonly LintItem[]): {
@@ -143,9 +144,7 @@ export function LintView() {
       switch (item.type) {
         case "orphan": {
           if (item.suggestedSource) {
-            const sourcePath = `${pp}/wiki/${item.suggestedSource}`
-            const content = await readFile(sourcePath)
-            await writeFile(sourcePath, appendWikilink(content, item.page))
+            await applySuggestedLinkFix(pp, item)
           } else {
             useReviewStore.getState().addItem({
               type: "suggestion",
@@ -165,12 +164,14 @@ export function LintView() {
         case "broken-link": {
           const pagePath = `${pp}/wiki/${item.page}`
           if (item.brokenTarget && item.suggestedTarget) {
-            const content = await readFile(pagePath)
-            await writeFile(pagePath, rewriteWikilinkTarget(content, item.brokenTarget, item.suggestedTarget))
+            await applySuggestedLinkFix(pp, item)
           } else if (item.brokenTarget) {
             const content = await readFile(pagePath)
             const stub = await ensureBrokenLinkStub(pp, item.brokenTarget)
-            await writeFile(pagePath, rewriteWikilinkTarget(content, item.brokenTarget, stub.relativePath))
+            await writeWikiMarkdownWithLog(pp, pagePath, rewriteWikilinkTarget(content, item.brokenTarget, stub.relativePath), {
+              operation: "autofix",
+              source: "Lint broken-link stub",
+            })
           } else {
             useReviewStore.getState().addItem({
               type: "confirm",
@@ -190,9 +191,7 @@ export function LintView() {
 
         case "no-outlinks": {
           if (item.suggestedTarget) {
-            const pagePath = `${pp}/wiki/${item.page}`
-            const content = await readFile(pagePath)
-            await writeFile(pagePath, appendWikilink(content, item.suggestedTarget))
+            await applySuggestedLinkFix(pp, item)
           } else {
             useReviewStore.getState().addItem({
               type: "suggestion",

@@ -1,8 +1,9 @@
-import { readFile, writeFile } from "@/commands/fs"
+import { readFile } from "@/commands/fs"
 import { streamChat } from "./llm-client"
 import { useWikiStore, type LlmConfig } from "@/stores/wiki-store"
 import { buildLanguageDirective } from "./output-language"
 import { normalizePath } from "@/lib/path-utils"
+import { writeWikiMarkdownWithLog } from "@/lib/wiki-change-log"
 
 /**
  * Lightweight post-save enrichment: ask LLM to add [[wikilinks]] to a saved wiki page.
@@ -96,7 +97,10 @@ export async function enrichWithWikilinks(
   const enriched = applyLinks(content, links)
   if (enriched === content) return
 
-  await writeFile(fp, enriched)
+  await writeWikiMarkdownWithLog(pp, fp, enriched, {
+    operation: "autofix",
+    source: "Wikilink enrichment",
+  })
   useWikiStore.getState().bumpDataVersion()
 }
 
