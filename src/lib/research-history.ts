@@ -1,6 +1,7 @@
 import { createDirectory, readFile, writeFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 import type { IngestReviewMode } from "@/lib/ingest"
+import type { ReviewItem } from "@/stores/review-store"
 
 export type ResearchTrigger = "manual-review" | "auto-review" | "graph-insight" | "research-panel"
 export type ResearchStatus = "queued" | "searching" | "synthesizing" | "saving" | "done" | "error"
@@ -130,4 +131,27 @@ export function makeResearchHistoryEntry(input: {
     status: input.status,
     error: input.error ?? null,
   }
+}
+
+export async function reconcileCompletedAutoResearchReviews(
+  projectPath: string,
+  items: ReviewItem[],
+): Promise<ReviewItem[]> {
+  const entries = await readHistory(projectPath)
+  const completedReviewIds = new Set(
+    entries
+      .filter((entry) =>
+        entry.trigger === "auto-review" &&
+        entry.autoQueued &&
+        entry.status === "done" &&
+        Boolean(entry.sourceReviewId)
+      )
+      .map((entry) => entry.sourceReviewId as string),
+  )
+  if (completedReviewIds.size === 0) return items
+  return items.map((item) =>
+    !item.resolved && completedReviewIds.has(item.id)
+      ? { ...item, resolved: true, resolvedAction: "Auto Deep Research completed" }
+      : item
+  )
 }

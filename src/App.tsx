@@ -11,6 +11,7 @@ import { BASE_FONT_SIZE_PX, useZoomStore } from "@/stores/zoom-store"
 import { listDirectory, openProject } from "@/commands/fs"
 import { getLastProject, getRecentProjects, saveLastProject, loadLlmConfig, loadLanguage, loadSearchApiConfig, loadEmbeddingConfig, loadMineruConfig, loadMultimodalConfig, loadOutputLanguage, loadProviderConfigs, loadActivePresetId, loadProxyConfig, loadScheduledImportConfig, saveScheduledImportConfig, loadSourceWatchConfig, loadApiConfig, loadGeneralConfig, loadZoomLevel } from "@/lib/project-store"
 import { loadReviewItems, loadLintItems, loadChatHistory, loadChatPreferences } from "@/lib/persist"
+import { reconcileCompletedAutoResearchReviews } from "@/lib/research-history"
 import { setupAutoSave } from "@/lib/auto-save"
 import { setupAutoDeepResearch } from "@/lib/auto-deep-research"
 import { startClipWatcher } from "@/lib/clip-watcher"
@@ -421,7 +422,8 @@ function App() {
       try {
         const savedReview = await loadReviewItems(proj.path)
         if (savedReview.length > 0) {
-          useReviewStore.getState().setItems(savedReview)
+          const reconciledReview = await reconcileCompletedAutoResearchReviews(proj.path, savedReview)
+          useReviewStore.getState().setItems(reconciledReview)
         }
       } catch {
         // ignore, start fresh

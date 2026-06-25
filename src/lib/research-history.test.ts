@@ -12,6 +12,7 @@ import {
   appendResearchHistory,
   updateResearchHistory,
   appendResearchLogSummary,
+  reconcileCompletedAutoResearchReviews,
   type ResearchHistoryEntry,
 } from "./research-history"
 
@@ -98,5 +99,49 @@ describe("appendResearchLogSummary", () => {
       "/project/wiki/log.md",
       "# Wiki Log\n- 2026-06-25: Auto Deep Research queued \"alpha\" -> wiki/queries/research-alpha.md (reviewExpansion: suppressed)\n",
     )
+  })
+})
+
+describe("reconcileCompletedAutoResearchReviews", () => {
+  it("marks unresolved source review items as resolved when auto research already completed", async () => {
+    fsMocks.readFile.mockResolvedValue(JSON.stringify([
+      entry({ id: "research-1", sourceReviewId: "review-1", status: "done" }),
+      entry({ id: "research-2", sourceReviewId: "review-2", status: "error" }),
+    ]))
+
+    const reconciled = await reconcileCompletedAutoResearchReviews("/project", [
+      {
+        id: "review-1",
+        type: "suggestion",
+        title: "Research alpha",
+        description: "alpha",
+        searchQueries: ["alpha"],
+        options: [],
+        resolved: false,
+        createdAt: 0,
+      },
+      {
+        id: "review-2",
+        type: "suggestion",
+        title: "Research beta",
+        description: "beta",
+        searchQueries: ["beta"],
+        options: [],
+        resolved: false,
+        createdAt: 0,
+      },
+    ])
+
+    expect(reconciled).toEqual([
+      expect.objectContaining({
+        id: "review-1",
+        resolved: true,
+        resolvedAction: "Auto Deep Research completed",
+      }),
+      expect.objectContaining({
+        id: "review-2",
+        resolved: false,
+      }),
+    ])
   })
 })
