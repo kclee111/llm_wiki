@@ -303,14 +303,21 @@ export const DEFAULT_GRAPH_NODE_SCALE = 1
 export const DEFAULT_GRAPH_SPACING = 1
 const MAX_PREVIEW_HISTORY = 50
 
+interface PreviewHistoryEntry {
+  path: string
+  scrollTop: number
+}
+
 interface WikiState {
   project: WikiProject | null
   fileTree: FileNode[]
   selectedFile: string | null
   fileContent: string
   previewContentPath: string | null
-  previewBackStack: string[]
-  previewForwardStack: string[]
+  previewBackStack: PreviewHistoryEntry[]
+  previewForwardStack: PreviewHistoryEntry[]
+  previewScrollPositions: Record<string, number>
+  pendingPreviewScrollTop: number | null
   externalPreview: ExternalPreview | null
   /**
    * One-shot scroll target for the markdown preview. When the user
@@ -359,6 +366,8 @@ interface WikiState {
   canGoForwardInPreview: () => boolean
   goBackInPreview: () => void
   goForwardInPreview: () => void
+  setPreviewScrollPosition: (path: string, scrollTop: number) => void
+  consumePendingPreviewScrollTop: () => number | null
   setExternalPreview: (preview: ExternalPreview | null) => void
   setPendingScrollImageSrc: (src: string | null) => void
   setActiveView: (view: WikiState["activeView"]) => void
@@ -383,11 +392,28 @@ interface WikiState {
   resetGraphViewState: () => void
 }
 
-function pushPreviewHistory(state: WikiState, nextPath: string): string[] {
+function getPreviewScrollTop(state: WikiState, path: string): number {
+  return state.previewScrollPositions[path] ?? 0
+}
+
+function currentPreviewHistoryEntry(state: WikiState): PreviewHistoryEntry | null {
+  if (!state.selectedFile || state.externalPreview) {
+    return null
+  }
+  return {
+    path: state.selectedFile,
+    scrollTop: getPreviewScrollTop(state, state.selectedFile),
+  }
+}
+
+function pushPreviewHistory(state: WikiState, nextPath: string): PreviewHistoryEntry[] {
   if (!state.selectedFile || state.selectedFile === nextPath || state.externalPreview) {
     return state.previewBackStack
   }
-  return [...state.previewBackStack, state.selectedFile].slice(-MAX_PREVIEW_HISTORY)
+  return [...state.previewBackStack, {
+    path: state.selectedFile,
+    scrollTop: getPreviewScrollTop(state, state.selectedFile),
+  }].slice(-MAX_PREVIEW_HISTORY)
 }
 
 export const useWikiStore = create<WikiState>((set, get) => ({
@@ -398,6 +424,8 @@ export const useWikiStore = create<WikiState>((set, get) => ({
   previewContentPath: null,
   previewBackStack: [],
   previewForwardStack: [],
+  previewScrollPositions: {},
+  pendingPreviewScrollTop: null,
   externalPreview: null,
   pendingScrollImageSrc: null,
   activeView: "wiki",
@@ -429,6 +457,8 @@ export const useWikiStore = create<WikiState>((set, get) => ({
       previewContentPath: null,
       previewBackStack: selectedFile ? get().previewBackStack : [],
       previewForwardStack: selectedFile ? get().previewForwardStack : [],
+      previewScrollPositions: selectedFile ? get().previewScrollPositions : {},
+      pendingPreviewScrollTop: selectedFile ? getPreviewScrollTop(get(), selectedFile) : null,
       externalPreview: null,
     }),
   setFileContent: (fileContent) => set({ fileContent }),
@@ -438,6 +468,7 @@ export const useWikiStore = create<WikiState>((set, get) => ({
       previewContentPath: null,
       previewBackStack: pushPreviewHistory(state, selectedFile),
       previewForwardStack: state.selectedFile === selectedFile ? state.previewForwardStack : [],
+      pendingPreviewScrollTop: getPreviewScrollTop(state, selectedFile),
       externalPreview: null,
       activeView: "wiki",
     })),
@@ -448,6 +479,11 @@ export const useWikiStore = create<WikiState>((set, get) => ({
       previewContentPath: selectedFile,
       previewBackStack: pushPreviewHistory(state, selectedFile),
       previewForwardStack: state.selectedFile === selectedFile ? state.previewForwardStack : [],
+      previewScrollPositions: {
+        ...state.previewScrollPositions,
+        [selectedFile]: getPreviewScrollTop(state, selectedFile),
+      },
+      pendingPreviewScrollTop: getPreviewScrollTop(state, selectedFile),
       externalPreview: null,
       activeView: "wiki",
     })),
@@ -457,14 +493,15 @@ export const useWikiStore = create<WikiState>((set, get) => ({
     set((state) => {
       const previous = state.previewBackStack[state.previewBackStack.length - 1]
       if (!previous) return state
-      const current = state.selectedFile
+      const current = currentPreviewHistoryEntry(state)
       return {
-        selectedFile: previous,
+        selectedFile: previous.path,
         previewContentPath: null,
         previewBackStack: state.previewBackStack.slice(0, -1),
         previewForwardStack: current
           ? [...state.previewForwardStack, current].slice(-MAX_PREVIEW_HISTORY)
           : state.previewForwardStack,
+        pendingPreviewScrollTop: previous.scrollTop,
         externalPreview: null,
         activeView: "wiki",
       }
@@ -473,18 +510,31 @@ export const useWikiStore = create<WikiState>((set, get) => ({
     set((state) => {
       const next = state.previewForwardStack[state.previewForwardStack.length - 1]
       if (!next) return state
-      const current = state.selectedFile
+      const current = currentPreviewHistoryEntry(state)
       return {
-        selectedFile: next,
+        selectedFile: next.path,
         previewContentPath: null,
         previewBackStack: current
           ? [...state.previewBackStack, current].slice(-MAX_PREVIEW_HISTORY)
           : state.previewBackStack,
         previewForwardStack: state.previewForwardStack.slice(0, -1),
+        pendingPreviewScrollTop: next.scrollTop,
         externalPreview: null,
         activeView: "wiki",
       }
     }),
+  setPreviewScrollPosition: (path, scrollTop) =>
+    set((state) => ({
+      previewScrollPositions: {
+        ...state.previewScrollPositions,
+        [path]: Math.max(0, scrollTop),
+      },
+    })),
+  consumePendingPreviewScrollTop: () => {
+    const pendingPreviewScrollTop = get().pendingPreviewScrollTop
+    set({ pendingPreviewScrollTop: null })
+    return pendingPreviewScrollTop
+  },
   setExternalPreview: (externalPreview) => set({ externalPreview }),
   setPendingScrollImageSrc: (pendingScrollImageSrc) => set({ pendingScrollImageSrc }),
   setActiveView: (activeView) => set({ activeView }),

@@ -21,7 +21,11 @@ export function PreviewPanel() {
   const canGoForward = useWikiStore((s) => s.canGoForwardInPreview())
   const goBackInPreview = useWikiStore((s) => s.goBackInPreview)
   const goForwardInPreview = useWikiStore((s) => s.goForwardInPreview)
+  const setPreviewScrollPosition = useWikiStore((s) => s.setPreviewScrollPosition)
+  const consumePendingPreviewScrollTop = useWikiStore((s) => s.consumePendingPreviewScrollTop)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const loadedPathRef = useRef<string | null>(null)
   // Snapshot of what was most recently loaded from disk. Milkdown re-emits
   // `markdownUpdated` on initial parse (before the user types anything),
   // which used to trigger an auto-save that could write back a placeholder
@@ -33,14 +37,18 @@ export function PreviewPanel() {
     if (!selectedFile) {
       setFileContent("")
       lastLoadedRef.current = ""
+      loadedPathRef.current = null
       return
     }
+    loadedPathRef.current = null
     if (previewContentPath === selectedFile) {
       lastLoadedRef.current = fileContent
+      loadedPathRef.current = selectedFile
       return
     }
     if (externalPreview?.path === selectedFile) {
       lastLoadedRef.current = fileContent
+      loadedPathRef.current = selectedFile
       return
     }
 
@@ -49,19 +57,54 @@ export function PreviewPanel() {
     if (isBinary(category) && !isExtractedTextPreviewFile(selectedFile)) {
       setFileContent("")
       lastLoadedRef.current = ""
+      loadedPathRef.current = selectedFile
       return
     }
 
     readFile(selectedFile)
       .then((content) => {
         lastLoadedRef.current = content
+        loadedPathRef.current = selectedFile
         setFileContent(content)
       })
       .catch((err) => {
         lastLoadedRef.current = ""
+        loadedPathRef.current = selectedFile
         setFileContent(`Error loading file: ${err}`)
       })
   }, [selectedFile, previewContentPath, externalPreview, setFileContent])
+
+  useEffect(() => {
+    if (!selectedFile || loadedPathRef.current !== selectedFile) return
+    const scrollTop = consumePendingPreviewScrollTop()
+    if (scrollTop === null) return
+    const frame = window.requestAnimationFrame(() => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollTop
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [selectedFile, fileContent, consumePendingPreviewScrollTop])
+
+  const recordCurrentPreviewScroll = useCallback(() => {
+    if (!selectedFile || externalPreview?.path === selectedFile) return
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+    setPreviewScrollPosition(selectedFile, scrollTop)
+  }, [externalPreview, selectedFile, setPreviewScrollPosition])
+
+  const handlePreviewScroll = useCallback(() => {
+    recordCurrentPreviewScroll()
+  }, [recordCurrentPreviewScroll])
+
+  const handleGoBack = useCallback(() => {
+    recordCurrentPreviewScroll()
+    goBackInPreview()
+  }, [goBackInPreview, recordCurrentPreviewScroll])
+
+  const handleGoForward = useCallback(() => {
+    recordCurrentPreviewScroll()
+    goForwardInPreview()
+  }, [goForwardInPreview, recordCurrentPreviewScroll])
 
   const writeNow = useCallback((path: string, markdown: string, syncStore = false) => {
     const write = project
@@ -123,7 +166,7 @@ export function PreviewPanel() {
               <TooltipTrigger
                 aria-label="Back"
                 disabled={!canGoBack}
-                onClick={goBackInPreview}
+                onClick={handleGoBack}
                 className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-35"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -134,7 +177,7 @@ export function PreviewPanel() {
               <TooltipTrigger
                 aria-label="Forward"
                 disabled={!canGoForward}
-                onClick={goForwardInPreview}
+                onClick={handleGoForward}
                 className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent disabled:pointer-events-none disabled:opacity-35"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -147,14 +190,21 @@ export function PreviewPanel() {
           </span>
         </div>
         <button
-          onClick={() => setSelectedFile(null)}
+          onClick={() => {
+            recordCurrentPreviewScroll()
+            setSelectedFile(null)
+          }}
           className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
           aria-label="Close preview"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="flex-1 min-w-0 overflow-auto">
+      <div
+        ref={category === "markdown" ? undefined : scrollContainerRef}
+        onScroll={category === "markdown" ? undefined : handlePreviewScroll}
+        className="flex-1 min-w-0 overflow-auto"
+      >
         {externalPreview?.path === selectedFile ? (
           <ExternalReferencePreview
             source={externalPreview.source}
@@ -168,6 +218,8 @@ export function PreviewPanel() {
             content={fileContent}
             onSave={handleSave}
             filePath={selectedFile}
+            scrollRootRef={scrollContainerRef}
+            onScroll={handlePreviewScroll}
           />
         ) : (
           <FilePreview

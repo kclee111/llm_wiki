@@ -61,28 +61,34 @@ describe("wiki preview store actions", () => {
       externalPreview: null,
       previewBackStack: [],
       previewForwardStack: [],
+      previewScrollPositions: {},
+      pendingPreviewScrollTop: null,
     })
 
+    useWikiStore.getState().setPreviewScrollPosition("/project/wiki/first.md", 420)
     useWikiStore.getState().openPathInPreview("/project/wiki/second.md")
 
     expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/second.md")
-    expect(useWikiStore.getState().previewBackStack).toEqual(["/project/wiki/first.md"])
+    expect(useWikiStore.getState().previewBackStack).toEqual([{ path: "/project/wiki/first.md", scrollTop: 420 }])
     expect(useWikiStore.getState().previewForwardStack).toEqual([])
     expect(useWikiStore.getState().canGoBackInPreview()).toBe(true)
     expect(useWikiStore.getState().canGoForwardInPreview()).toBe(false)
 
+    useWikiStore.getState().setPreviewScrollPosition("/project/wiki/second.md", 180)
     useWikiStore.getState().goBackInPreview()
 
     expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/first.md")
     expect(useWikiStore.getState().previewBackStack).toEqual([])
-    expect(useWikiStore.getState().previewForwardStack).toEqual(["/project/wiki/second.md"])
+    expect(useWikiStore.getState().previewForwardStack).toEqual([{ path: "/project/wiki/second.md", scrollTop: 180 }])
+    expect(useWikiStore.getState().consumePendingPreviewScrollTop()).toBe(420)
     expect(useWikiStore.getState().canGoBackInPreview()).toBe(false)
     expect(useWikiStore.getState().canGoForwardInPreview()).toBe(true)
 
     useWikiStore.getState().goForwardInPreview()
 
     expect(useWikiStore.getState().selectedFile).toBe("/project/wiki/second.md")
-    expect(useWikiStore.getState().previewBackStack).toEqual(["/project/wiki/first.md"])
+    expect(useWikiStore.getState().previewBackStack).toEqual([{ path: "/project/wiki/first.md", scrollTop: 420 }])
     expect(useWikiStore.getState().previewForwardStack).toEqual([])
+    expect(useWikiStore.getState().consumePendingPreviewScrollTop()).toBe(180)
   })
 })

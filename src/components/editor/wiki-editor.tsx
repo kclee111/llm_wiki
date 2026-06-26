@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref, type UIEventHandler } from "react"
 import { Editor, rootCtx, defaultValueCtx } from "@milkdown/kit/core"
 import { commonmark } from "@milkdown/kit/preset/commonmark"
 import { gfm } from "@milkdown/kit/preset/gfm"
@@ -62,6 +62,8 @@ interface WikiEditorProps {
   /** Absolute path of the file, threaded to WikiReader so relative
    *  image references resolve against the file's own directory. */
   filePath?: string
+  scrollRootRef?: Ref<HTMLDivElement>
+  onScroll?: UIEventHandler<HTMLDivElement>
 }
 
 function wrapBareMathBlocks(text: string): string {
@@ -71,7 +73,7 @@ function wrapBareMathBlocks(text: string): string {
   )
 }
 
-export function WikiEditor({ content, onSave, filePath }: WikiEditorProps) {
+export function WikiEditor({ content, onSave, filePath, scrollRootRef, onScroll }: WikiEditorProps) {
   // Default to read mode (ReactMarkdown render). Edit mode swaps
   // in Milkdown WYSIWYG. We default to read because:
   //   1. Milkdown's commonmark/gfm preset has no wikilink schema,
@@ -114,8 +116,10 @@ export function WikiEditor({ content, onSave, filePath }: WikiEditorProps) {
 
   return (
     <div
+      ref={scrollRootRef}
       className="relative h-full overflow-auto"
       tabIndex={-1}
+      onScroll={onScroll}
       onKeyDownCapture={(event) => {
         if (mode !== "edit") return
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
