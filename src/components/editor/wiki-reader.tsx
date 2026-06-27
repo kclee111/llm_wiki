@@ -80,7 +80,7 @@ export function WikiReader({ body, filePath }: WikiReaderProps) {
 
   return (
     <div
-      className="prose prose-invert min-w-0 max-w-none"
+      className="wiki-reader prose prose-invert min-w-0 max-w-none"
       dir={direction}
       lang={htmlLang}
       style={{ textAlign: "start" }}
@@ -98,8 +98,8 @@ export function WikiReader({ body, filePath }: WikiReaderProps) {
                 onClick={(e) => isWikilink && handleAnchorClick(e, h)}
                 className={
                   isWikilink
-                    ? "cursor-pointer text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
-                    : "text-primary underline underline-offset-2"
+                    ? "wiki-reader-link cursor-pointer underline underline-offset-2"
+                    : "wiki-reader-link underline underline-offset-2"
                 }
                 {...props}
               >

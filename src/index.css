@@ -162,3 +162,86 @@
 .legend-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+.wiki-reader {
+  --wiki-reader-text: oklch(0.31 0.012 260);
+  --wiki-reader-heading: oklch(0.18 0.01 260);
+  --wiki-reader-muted: oklch(0.48 0.012 260);
+  --wiki-reader-link: oklch(0.51 0.18 257);
+  --wiki-reader-link-hover: oklch(0.45 0.2 257);
+  --wiki-reader-code-bg: oklch(0.96 0.01 260);
+  color: var(--wiki-reader-text);
+  font-family:
+    "Geist Variable",
+    "Pretendard",
+    "Noto Sans KR",
+    "Malgun Gothic",
+    "Apple SD Gothic Neo",
+    system-ui,
+    sans-serif;
+  font-size: 0.98rem;
+  font-weight: 450;
+  line-height: 1.78;
+  text-rendering: optimizeLegibility;
+}
+
+.dark .wiki-reader {
+  --wiki-reader-text: oklch(0.83 0.012 260);
+  --wiki-reader-heading: oklch(0.93 0.006 260);
+  --wiki-reader-muted: oklch(0.68 0.012 260);
+  --wiki-reader-link: oklch(0.73 0.16 255);
+  --wiki-reader-link-hover: oklch(0.79 0.14 250);
+  --wiki-reader-code-bg: oklch(0.23 0.01 260);
+}
+
+.wiki-reader :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--wiki-reader-heading);
+  font-family:
+    "Geist Variable",
+    "Pretendard",
+    "Noto Sans KR",
+    "Malgun Gothic",
+    system-ui,
+    sans-serif;
+  font-weight: 720;
+}
+
+.wiki-reader :where(p, li, blockquote, td) {
+  color: var(--wiki-reader-text);
+}
+
+.wiki-reader :where(strong) {
+  color: var(--wiki-reader-heading);
+  font-weight: 680;
+}
+
+.wiki-reader :where(ul, ol) {
+  padding-inline-start: 1.55rem;
+}
+
+.wiki-reader :where(li)::marker {
+  color: var(--wiki-reader-muted);
+}
+
+.wiki-reader .wiki-reader-link {
+  color: var(--wiki-reader-link);
+  font-weight: 620;
+  text-decoration-color: color-mix(in oklch, var(--wiki-reader-link) 58%, transparent);
+  transition:
+    color 120ms ease,
+    text-decoration-color 120ms ease;
+}
+
+.wiki-reader .wiki-reader-link:hover {
+  color: var(--wiki-reader-link-hover);
+  text-decoration-color: var(--wiki-reader-link-hover);
+}
+
+.wiki-reader :where(code):not(pre code) {
+  border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  border-radius: 0.3rem;
+  background: var(--wiki-reader-code-bg);
+  color: var(--wiki-reader-heading);
+  font-size: 0.88em;
+  padding: 0.08rem 0.32rem;
+}
